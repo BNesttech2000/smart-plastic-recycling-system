@@ -14,17 +14,10 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 // Load environment variables
 dotenv.config();
 
-// FIX: Map MONGODB_URI to MONGO_URI if needed
+// Map MONGODB_URI to MONGO_URI if needed
 if (!process.env.MONGO_URI && process.env.MONGODB_URI) {
   process.env.MONGO_URI = process.env.MONGODB_URI;
-  console.log('✅ Mapped MONGODB_URI to MONGO_URI');
 }
-
-// Debug: Check if MONGO_URI is loaded
-console.log('🔍 Environment check:');
-console.log('   MONGO_URI:', process.env.MONGO_URI ? '✅ Found' : '❌ Missing');
-console.log('   MONGODB_URI:', process.env.MONGODB_URI ? '✅ Found' : '❌ Missing');
-console.log('   NODE_ENV:', process.env.NODE_ENV || 'not set');
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
@@ -50,7 +43,6 @@ const uploadDirs = [
 uploadDirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
-    console.log(`📁 Created directory: ${dir}`);
   }
 });
 
@@ -125,8 +117,6 @@ const connectDB = async (retryCount = 0) => {
   const maxRetries = 3;
   
   try {
-    console.log('🔄 Attempting to connect to MongoDB...');
-    
     if (!process.env.MONGO_URI) {
       throw new Error('MONGO_URI is not defined in environment variables');
     }
@@ -143,13 +133,9 @@ const connectDB = async (retryCount = 0) => {
       connectTimeoutMS: 30000
     };
 
-    console.log('📡 Connecting to:', process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//<credentials>@'));
-
     const conn = await mongoose.connect(process.env.MONGO_URI, options);
     
-    console.log(`✅ MongoDB Connected Successfully!`);
-    console.log(`   Host: ${conn.connection.host}`);
-    console.log(`   Database: ${conn.connection.name}`);
+    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     
     // Create default admin if not exists
     try {
@@ -167,7 +153,7 @@ const connectDB = async (retryCount = 0) => {
         console.log('👤 Default admin created');
       }
     } catch (adminError) {
-      console.error('⚠️ Error creating default admin:', adminError.message);
+      // Silent fail for admin creation
     }
 
     // Connection event handlers
@@ -185,25 +171,14 @@ const connectDB = async (retryCount = 0) => {
 
     return conn;
   } catch (error) {
-    console.error(`❌ MongoDB connection attempt ${retryCount + 1} failed:`);
-    console.error(`   Error: ${error.message}`);
-    
-    if (error.message.includes('authentication')) {
-      console.error('\n📌 Authentication Error:');
-      console.error('1. Check username and password in MONGO_URI');
-      console.error('2. Verify database user has correct permissions');
-      console.error('3. If password has special chars, URL-encode them:');
-      console.error('   @ → %40, # → %23, $ → %24, & → %26, ! → %21');
-    }
-
     if (retryCount < maxRetries) {
       const delay = Math.pow(2, retryCount) * 1000;
-      console.log(`⏳ Retrying in ${delay/1000} seconds... (Attempt ${retryCount + 1}/${maxRetries})`);
+      console.log(`⏳ Retrying connection in ${delay/1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return connectDB(retryCount + 1);
     }
 
-    console.error('\n❌ All connection attempts failed. Exiting...');
+    console.error('❌ MongoDB connection failed:', error.message);
     process.exit(1);
   }
 };
@@ -213,21 +188,19 @@ const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
   const server = app.listen(PORT, () => {
-    console.log(`\n🚀 Server running in ${process.env.NODE_ENV || 'development'} mode`);
-    console.log(`📡 Listening on port ${PORT}`);
-    console.log(`🔗 Local: http://localhost:${PORT}`);
-    console.log(`🌍 Health check: http://localhost:${PORT}/health\n`);
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`🔗 http://localhost:${PORT}\n`);
   });
 
   // Handle unhandled rejections
   process.on('unhandledRejection', (err) => {
-    console.log('❌ Unhandled Rejection:', err);
+    console.error('❌ Unhandled Rejection:', err);
     server.close(() => process.exit(1));
   });
 
   // Handle uncaught exceptions
   process.on('uncaughtException', (err) => {
-    console.log('❌ Uncaught Exception:', err);
+    console.error('❌ Uncaught Exception:', err);
     server.close(() => process.exit(1));
   });
 
