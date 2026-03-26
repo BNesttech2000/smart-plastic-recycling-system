@@ -1,36 +1,11 @@
-// server/src/routes/adminRoutes.js
 const express = require('express');
 const router = express.Router();
-const {
-  adminLogin,
-  getUsers,
-  getUserById,
-  updateUser,
-  deleteUser,
-  createAdmin,
-  getDashboardStats
-} = require('../controllers/adminController');
-const { admin } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
+const { getUsers, getUserById, updateUser, deleteUser } = require('../controllers/adminController');
 
-// Public route
-router.post('/login', adminLogin);
-
-// All routes below require admin authentication
-router.use(admin);
-
-// Dashboard
-router.get('/dashboard', getDashboardStats);
-
-// User management
-router.route('/users')
-  .get(getUsers);
-
-router.route('/users/:id')
-  .get(getUserById)
-  .put(updateUser)
-  .delete(deleteUser);
-
-// Admin management (super admin only)
-router.post('/create', createAdmin);
+router.get('/users', protect, admin, getUsers);
+router.get('/users/:id', protect, admin, getUserById);
+router.put('/users/:id', protect, admin, updateUser);
+router.delete('/users/:id', protect, admin, deleteUser);
 
 module.exports = router;

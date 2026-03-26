@@ -7,8 +7,22 @@ export const adminService = {
   },
 
   getUsers: async (page = 1, limit = 10) => {
-    // This endpoint would need to be implemented in backend
     const response = await api.get(`/admin/users?page=${page}&limit=${limit}`);
+    return response.data;
+  },
+
+  updateUserStatus: async (userId, isActive) => {
+    const response = await api.put(`/admin/users/${userId}`, { isActive });
+    return response.data;
+  },
+
+  updateUser: async (userId, userData) => {
+    const response = await api.put(`/admin/users/${userId}`, userData);
+    return response.data;
+  },
+
+  deleteUser: async (userId) => {
+    const response = await api.delete(`/admin/users/${userId}`);
     return response.data;
   },
 

@@ -1,7 +1,7 @@
 // server/src/controllers/incentiveController.js
 const Incentive = require('../models/Incentive');
 const User = require('../models/User');
-const PlasticContribution = require('../models/plasticContribution');
+const PlasticContribution = require('../models/PlasticContribution');
 const { asyncHandler } = require('../middleware/errorMiddleware');
 const { calculateIncentivePoints, getRewardTier } = require('../utils/incentiveCalculator');
 

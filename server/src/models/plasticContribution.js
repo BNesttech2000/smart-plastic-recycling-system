@@ -55,9 +55,16 @@ const plasticContributionSchema = new mongoose.Schema({
     trim: true,
     maxlength: 500
   },
+  // FIXED: Location is now completely optional - no default values
   location: {
-    type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: [Number]
+    type: {
+      type: String,
+      enum: ['Point']
+    },
+    coordinates: {
+      type: [Number],
+      index: '2dsphere'
+    }
   },
   rejectionReason: String,
   processedDate: Date

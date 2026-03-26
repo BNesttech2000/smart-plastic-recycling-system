@@ -1,4 +1,3 @@
-// server/src/middleware/uploadMiddleware.js
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -15,6 +14,7 @@ const uploadDirs = [
 uploadDirs.forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created directory: ${dir}`);
   }
 });
 
@@ -56,7 +56,7 @@ const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
-    files: 5 // Max 5 files
+    files: 5
   },
   fileFilter: fileFilter
 });
@@ -71,33 +71,32 @@ const optimizeImages = async (req, res, next) => {
     const files = req.files || (req.file ? [req.file] : []);
     
     for (const file of files) {
-      const outputPath = file.path.replace('/temp/', '/optimized/');
-      const outputDir = path.dirname(outputPath);
+      const ext = path.extname(file.path);
+      const optimizedPath = file.path.replace(ext, `-optimized${ext}`);
       
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true });
+      try {
+        await sharp(file.path)
+          .resize(1200, 1200, {
+            fit: 'inside',
+            withoutEnlargement: true
+          })
+          .jpeg({ quality: 80 })
+          .toFile(optimizedPath);
+        
+        // Replace original with optimized
+        fs.unlinkSync(file.path);
+        fs.renameSync(optimizedPath, file.path);
+        
+        file.filename = path.basename(file.path);
+      } catch (sharpError) {
+        console.error('Sharp optimization error:', sharpError);
+        // Continue with original file if optimization fails
       }
-
-      // Optimize image
-      await sharp(file.path)
-        .resize(1200, 1200, { // Max dimensions
-          fit: 'inside',
-          withoutEnlargement: true
-        })
-        .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
-        .toFile(outputPath);
-
-      // Remove original file
-      fs.unlinkSync(file.path);
-
-      // Update file path
-      file.path = outputPath;
-      file.filename = path.basename(outputPath);
     }
-
     next();
   } catch (error) {
-    next(error);
+    console.error('Optimize images error:', error);
+    next();
   }
 };
 
