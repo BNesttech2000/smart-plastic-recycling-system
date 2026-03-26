@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
+import { adminService } from '../../services/adminService';
 import {
   FaSearch,
   FaFilter,
   FaUserEdit,
-  FaUserCog,
   FaTrash,
   FaBan,
   FaCheckCircle,
@@ -16,26 +16,11 @@ import {
   FaMapMarkerAlt,
   FaCalendarAlt,
   FaStar,
+  FaSpinner,
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-
-// Mock data - replace with actual API calls
-const mockUsers = Array.from({ length: 20 }, (_, i) => ({
-  id: i + 1,
-  name: `User ${i + 1}`,
-  email: `user${i + 1}@example.com`,
-  phone: `+260 97 ${Math.floor(100000 + Math.random() * 900000)}`,
-  address: `Lusaka, Zambia`,
-  totalPoints: Math.floor(Math.random() * 1000),
-  totalContributions: Math.floor(Math.random() * 50),
-  totalWeight: (Math.random() * 100).toFixed(1),
-  rewardTier: ['Bronze', 'Silver', 'Gold', 'Platinum'][Math.floor(Math.random() * 4)],
-  status: Math.random() > 0.1 ? 'active' : 'inactive',
-  joinedDate: new Date(2024, Math.floor(Math.random() * 3), Math.floor(Math.random() * 28) + 1),
-  lastActive: new Date(2024, 2, Math.floor(Math.random() * 28) + 1),
-}));
 
 const ManageUsers = () => {
   const [users, setUsers] = useState([]);
@@ -46,16 +31,26 @@ const ManageUsers = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [currentPage, searchTerm, filterStatus, filterTier]);
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      // Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setUsers(mockUsers);
+      // Call the real API endpoint
+      const response = await adminService.getUsers(currentPage, 10);
+      if (response.success) {
+        setUsers(response.data.users);
+        setTotalUsers(response.data.pagination?.total || response.data.users.length);
+        setTotalPages(response.data.pagination?.pages || 1);
+      } else {
+        toast.error('Failed to fetch users');
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
       toast.error('Failed to fetch users');
@@ -65,10 +60,13 @@ const ManageUsers = () => {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
-    const matchesTier = filterTier === 'all' || user.rewardTier.toLowerCase() === filterTier.toLowerCase();
+    const matchesSearch = searchTerm === '' || 
+      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = filterStatus === 'all' || 
+      (filterStatus === 'active' ? user.isActive === true : user.isActive === false);
+    const matchesTier = filterTier === 'all' || 
+      user.rewardTier?.toLowerCase() === filterTier.toLowerCase();
     return matchesSearch && matchesStatus && matchesTier;
   });
 
@@ -81,33 +79,61 @@ const ManageUsers = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    return status === 'active' 
+  const getStatusColor = (isActive) => {
+    return isActive 
       ? 'bg-green-100 text-green-800'
       : 'bg-red-100 text-red-800';
   };
 
-  const handleStatusChange = async (userId, newStatus) => {
+  const handleStatusChange = async (userId, currentStatus) => {
     try {
-      // Replace with actual API call
-      setUsers(users.map(u => 
-        u.id === userId ? { ...u, status: newStatus } : u
-      ));
-      toast.success(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+      const newStatus = !currentStatus;
+      // Call your API to update user status
+      const response = await adminService.updateUserStatus(userId, newStatus);
+      if (response.success) {
+        setUsers(users.map(u => 
+          u._id === userId ? { ...u, isActive: newStatus } : u
+        ));
+        toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
+      } else {
+        toast.error('Failed to update user status');
+      }
     } catch (error) {
       toast.error('Failed to update user status');
     }
   };
 
   const handleDeleteUser = async () => {
+    if (!selectedUser) return;
     try {
-      // Replace with actual API call
-      setUsers(users.filter(u => u.id !== selectedUser.id));
-      toast.success('User deleted successfully');
-      setShowDeleteModal(false);
-      setSelectedUser(null);
+      const response = await adminService.deleteUser(selectedUser._id);
+      if (response.success) {
+        setUsers(users.filter(u => u._id !== selectedUser._id));
+        toast.success('User deleted successfully');
+        setShowDeleteModal(false);
+        setSelectedUser(null);
+      } else {
+        toast.error('Failed to delete user');
+      }
     } catch (error) {
       toast.error('Failed to delete user');
+    }
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
+    try {
+      const response = await adminService.updateUser(selectedUser._id, selectedUser);
+      if (response.success) {
+        setUsers(users.map(u => u._id === selectedUser._id ? selectedUser : u));
+        toast.success('User updated successfully');
+        setShowUserModal(false);
+        setSelectedUser(null);
+      } else {
+        toast.error('Failed to update user');
+      }
+    } catch (error) {
+      toast.error('Failed to update user');
     }
   };
 
@@ -206,7 +232,7 @@ const ManageUsers = () => {
             <tbody className="divide-y divide-gray-100">
               {filteredUsers.map((user) => (
                 <motion.tr
-                  key={user.id}
+                  key={user._id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -216,12 +242,12 @@ const ManageUsers = () => {
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-full flex items-center justify-center">
                         <span className="text-white font-medium">
-                          {user.name.split(' ').map(n => n[0]).join('')}
+                          {user.name?.split(' ').map(n => n[0]).join('') || 'U'}
                         </span>
                       </div>
                       <div>
                         <p className="font-medium text-gray-800">{user.name}</p>
-                        <p className="text-sm text-gray-500">ID: #{user.id}</p>
+                        <p className="text-sm text-gray-500">ID: {user._id?.slice(-6)}</p>
                       </div>
                     </div>
                   </td>
@@ -233,39 +259,36 @@ const ManageUsers = () => {
                       </p>
                       <p className="flex items-center text-sm text-gray-600">
                         <FaPhone className="mr-2 text-gray-400" size={12} />
-                        {user.phone}
+                        {user.phone || 'Not provided'}
                       </p>
                       <p className="flex items-center text-sm text-gray-600">
                         <FaMapMarkerAlt className="mr-2 text-gray-400" size={12} />
-                        {user.address}
+                        {user.address || 'Not provided'}
                       </p>
                     </div>
                   </td>
                   <td className="py-4 px-6">
                     <div className="space-y-1">
-                      <p className="text-sm text-gray-600">Points: {user.totalPoints}</p>
-                      <p className="text-sm text-gray-600">Contributions: {user.totalContributions}</p>
-                      <p className="text-sm text-gray-600">Weight: {user.totalWeight} kg</p>
+                      <p className="text-sm text-gray-600">Points: {user.totalPoints || 0}</p>
+                      <p className="text-sm text-gray-600">Contributions: {user.totalContributions || 0}</p>
+                      <p className="text-sm text-gray-600">Weight: {user.totalWeight || 0} kg</p>
                     </div>
                   </td>
                   <td className="py-4 px-6">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTierColor(user.rewardTier)}`}>
-                      {user.rewardTier}
+                      {user.rewardTier || 'Bronze'}
                     </span>
                   </td>
                   <td className="py-4 px-6">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user.status)}`}>
-                      {user.status}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user.isActive)}`}>
+                      {user.isActive ? 'active' : 'inactive'}
                     </span>
                   </td>
                   <td className="py-4 px-6">
                     <div className="space-y-1">
                       <p className="flex items-center text-sm text-gray-600">
                         <FaCalendarAlt className="mr-2 text-gray-400" size={12} />
-                        {format(user.joinedDate, 'MMM dd, yyyy')}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Last active: {format(user.lastActive, 'MMM dd')}
+                        {user.joinedDate ? format(new Date(user.joinedDate), 'MMM dd, yyyy') : 'N/A'}
                       </p>
                     </div>
                   </td>
@@ -282,15 +305,15 @@ const ManageUsers = () => {
                         <FaUserEdit />
                       </button>
                       <button
-                        onClick={() => handleStatusChange(user.id, user.status === 'active' ? 'inactive' : 'active')}
+                        onClick={() => handleStatusChange(user._id, user.isActive)}
                         className={`p-2 rounded-lg transition-colors ${
-                          user.status === 'active'
+                          user.isActive
                             ? 'text-red-600 hover:bg-red-50'
                             : 'text-green-600 hover:bg-green-50'
                         }`}
-                        title={user.status === 'active' ? 'Deactivate' : 'Activate'}
+                        title={user.isActive ? 'Deactivate' : 'Activate'}
                       >
-                        {user.status === 'active' ? <FaBan /> : <FaCheckCircle />}
+                        {user.isActive ? <FaBan /> : <FaCheckCircle />}
                       </button>
                       <button
                         onClick={() => {
@@ -313,24 +336,24 @@ const ManageUsers = () => {
         {/* Pagination */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100">
           <p className="text-sm text-gray-600">
-            Showing {filteredUsers.length} of {users.length} users
+            Showing {filteredUsers.length} of {totalUsers} users
           </p>
           <div className="flex items-center space-x-2">
-            <button className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Previous
             </button>
-            <button className="px-3 py-1 bg-primary-600 text-white rounded-lg text-sm">1</button>
-            <button className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-              2
-            </button>
-            <button className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-              3
-            </button>
-            <span className="text-gray-400">...</span>
-            <button className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-              10
-            </button>
-            <button className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+            <span className="px-3 py-1 text-sm text-gray-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               Next
             </button>
           </div>
@@ -356,12 +379,13 @@ const ManageUsers = () => {
             >
               <div className="p-6">
                 <h2 className="text-xl font-bold text-gray-800 mb-4">Edit User</h2>
-                <form className="space-y-4">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                     <input
                       type="text"
-                      defaultValue={selectedUser.name}
+                      value={selectedUser.name || ''}
+                      onChange={(e) => setSelectedUser({ ...selectedUser, name: e.target.value })}
                       className="input-field"
                     />
                   </div>
@@ -369,29 +393,37 @@ const ManageUsers = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                     <input
                       type="email"
-                      defaultValue={selectedUser.email}
+                      value={selectedUser.email || ''}
+                      onChange={(e) => setSelectedUser({ ...selectedUser, email: e.target.value })}
                       className="input-field"
+                      disabled
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                     <input
                       type="tel"
-                      defaultValue={selectedUser.phone}
+                      value={selectedUser.phone || ''}
+                      onChange={(e) => setSelectedUser({ ...selectedUser, phone: e.target.value })}
                       className="input-field"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
                     <textarea
-                      defaultValue={selectedUser.address}
+                      value={selectedUser.address || ''}
+                      onChange={(e) => setSelectedUser({ ...selectedUser, address: e.target.value })}
                       rows="3"
                       className="input-field"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Reward Tier</label>
-                    <select defaultValue={selectedUser.rewardTier} className="input-field">
+                    <select
+                      value={selectedUser.rewardTier || 'Bronze'}
+                      onChange={(e) => setSelectedUser({ ...selectedUser, rewardTier: e.target.value })}
+                      className="input-field"
+                    >
                       <option value="Bronze">Bronze</option>
                       <option value="Silver">Silver</option>
                       <option value="Gold">Gold</option>
@@ -408,16 +440,13 @@ const ManageUsers = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        toast.success('User updated successfully');
-                        setShowUserModal(false);
-                      }}
+                      onClick={handleUpdateUser}
                       className="btn-primary"
                     >
                       Save Changes
                     </button>
                   </div>
-                </form>
+                </div>
               </div>
             </motion.div>
           </motion.div>

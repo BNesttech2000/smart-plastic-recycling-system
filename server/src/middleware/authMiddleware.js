@@ -1,7 +1,6 @@
 // server/src/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const Administrator = require('../models/Administrator');
 const { asyncHandler } = require('./errorMiddleware');
 
 // Protect routes - verify user token
@@ -26,7 +25,7 @@ const protect = asyncHandler(async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error(error);
+      console.error('Auth error:', error);
       res.status(401);
       throw new Error('Not authorized - token failed');
     }
@@ -38,33 +37,15 @@ const protect = asyncHandler(async (req, res, next) => {
   }
 });
 
-// Admin middleware
+// Admin middleware - FIXED: checks role instead of isAdmin
 const admin = asyncHandler(async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-      // Check if it's an admin
-      req.admin = await Administrator.findById(decoded.id).select('-password');
-
-      if (!req.admin) {
-        res.status(401);
-        throw new Error('Not authorized as admin');
-      }
-
-      next();
-    } catch (error) {
-      res.status(401);
-      throw new Error('Not authorized as admin');
-    }
-  }
-
-  if (!token) {
-    res.status(401);
-    throw new Error('Not authorized - no token');
+  // Check if user exists and has admin role
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    console.log('Admin check failed. User role:', req.user?.role);
+    res.status(403); // 403 Forbidden
+    throw new Error('Not authorized as admin');
   }
 });
 

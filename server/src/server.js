@@ -25,6 +25,14 @@ const contributionRoutes = require('./routes/contributionRoutes');
 const incentiveRoutes = require('./routes/incentiveRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const rewardRoutes = require('./routes/rewardRoutes');
+const adminRewardRoutes = require('./routes/adminRewardRoutes');
+const recyclingCenterRoutes = require('./routes/recyclingCenterRoutes');
+const adminRecyclingCenterRoutes = require('./routes/adminRecyclingCenterRoutes');
+const eventRoutes = require('./routes/eventRoutes');
+const adminEventRoutes = require('./routes/adminEventRoutes');
+const resourceRoutes = require('./routes/resourceRoutes');
+const adminResourceRoutes = require('./routes/adminResourceRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -68,6 +76,14 @@ app.use('/api/contributions', contributionRoutes);
 app.use('/api/incentives', incentiveRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/rewards', rewardRoutes);
+app.use('/api/admin/rewards', adminRewardRoutes);
+app.use('/api/recycling-centers', recyclingCenterRoutes);
+app.use('/api/admin/recycling-centers', adminRecyclingCenterRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/admin/events', adminEventRoutes);
+app.use('/api/resources', resourceRoutes);
+app.use('/api/admin/resources', adminResourceRoutes);
 
 // Base route
 app.get('/', (req, res) => {
@@ -80,7 +96,11 @@ app.get('/', (req, res) => {
       contributions: '/api/contributions',
       incentives: '/api/incentives',
       admin: '/api/admin',
-      reports: '/api/reports'
+      reports: '/api/reports',
+      rewards: '/api/rewards',
+      recyclingCenters: '/api/recycling-centers',
+      events: '/api/events',
+      resources: '/api/resources'
     }
   });
 });

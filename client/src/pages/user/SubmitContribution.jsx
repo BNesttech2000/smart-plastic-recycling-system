@@ -31,6 +31,7 @@ const SubmitContribution = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [showManualLocation, setShowManualLocation] = useState(false);
   const [formData, setFormData] = useState({
     plasticType: '',
     quantity: '',
@@ -48,7 +49,6 @@ const SubmitContribution = () => {
     setFormData(prev => {
       const newData = { ...prev, [name]: value };
       
-      // Calculate points when plastic type or quantity changes
       if (name === 'plasticType' || name === 'quantity') {
         if (newData.plasticType && newData.quantity) {
           const type = plasticTypes.find(t => t.value === newData.plasticType);
@@ -60,7 +60,6 @@ const SubmitContribution = () => {
       return newData;
     });
 
-    // Clear error for this field
     if (errors[name]) {
       setErrors({ ...errors, [name]: '' });
     }
@@ -68,34 +67,27 @@ const SubmitContribution = () => {
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
-    
-    // Validate file types and sizes
     const validFiles = [];
-    const errors = [];
+    const fileErrors = [];
 
     for (const file of files) {
-      // Check file type
       if (!file.type.startsWith('image/')) {
-        errors.push(`${file.name} is not an image file`);
+        fileErrors.push(`${file.name} is not an image file`);
         continue;
       }
-
-      // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        errors.push(`${file.name} exceeds 5MB limit`);
+        fileErrors.push(`${file.name} exceeds 5MB limit`);
         continue;
       }
-
       validFiles.push(file);
     }
 
-    if (errors.length > 0) {
-      errors.forEach(error => toast.error(error));
+    if (fileErrors.length > 0) {
+      fileErrors.forEach(error => toast.error(error));
     }
 
     if (validFiles.length === 0) return;
 
-    // Check total images limit
     if (validFiles.length + images.length > 5) {
       toast.error('You can only upload up to 5 images total');
       return;
@@ -104,7 +96,6 @@ const SubmitContribution = () => {
     setUploadingImages(true);
 
     try {
-      // Convert images to base64 for preview and storage
       const imagePromises = validFiles.map(async (file) => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -115,8 +106,6 @@ const SubmitContribution = () => {
             name: file.name,
             size: file.size,
             type: file.type,
-            uploading: false,
-            uploaded: false
           });
           reader.onerror = error => reject(error);
         });
@@ -124,7 +113,6 @@ const SubmitContribution = () => {
 
       const newImages = await Promise.all(imagePromises);
       setImages(prev => [...prev, ...newImages]);
-      
       toast.success(`${validFiles.length} image(s) added successfully`);
     } catch (error) {
       console.error('Error processing images:', error);
@@ -140,44 +128,102 @@ const SubmitContribution = () => {
   };
 
   const getLocation = () => {
-    if (navigator.geolocation) {
-      toast.loading('Getting your location...', { id: 'location' });
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFormData(prev => ({
-            ...prev,
-            location: {
-              type: 'Point',
-              coordinates: [position.coords.longitude, position.coords.latitude],
-            },
-          }));
-          toast.success('Location captured successfully!', { id: 'location' });
-        },
-        (error) => {
-          let errorMessage = 'Could not get your location.';
-          switch(error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location permission denied. Please enable location access.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information unavailable.';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'Location request timed out.';
-              break;
-          }
-          toast.error(errorMessage, { id: 'location' });
-          console.error('Error getting location:', error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      );
-    } else {
-      toast.error('Geolocation is not supported by your browser');
+    // Check if browser supports geolocation
+    if (!navigator.geolocation) {
+      toast.error('❌ Geolocation is not supported by your browser');
+      return;
     }
+
+    // Check if using HTTPS (except localhost)
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      toast.warning('⚠️ Location works best with HTTPS. You may need to allow location manually.');
+    }
+
+    // Show loading
+    toast.loading('📍 Getting your location...', { id: 'location' });
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      // Success
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        
+        const locationObj = {
+          type: "Point",
+          coordinates: [longitude, latitude],
+          accuracy: accuracy
+        };
+        
+        console.log('✅ Location captured:', locationObj);
+        
+        setFormData(prev => ({
+          ...prev,
+          location: locationObj
+        }));
+        
+        toast.success(`📍 Location captured! Accuracy: ±${Math.round(accuracy)}m`, { 
+          id: 'location',
+          duration: 3000
+        });
+      },
+      
+      // Error
+      (error) => {
+        console.error('❌ Geolocation error:', error);
+        
+        let errorMessage = '';
+        let suggestion = '';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = '❌ Location permission denied';
+            suggestion = ' Please allow location access in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = '📍 Location information unavailable';
+            suggestion = ' Check your GPS/network connection.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = '⏱️ Location request timed out';
+            suggestion = ' Please try again or enter location manually.';
+            break;
+          default:
+            errorMessage = `Location error: ${error.message}`;
+            suggestion = '';
+        }
+        
+        toast.error(errorMessage + suggestion, { 
+          id: 'location',
+          duration: 5000
+        });
+        
+        // Reset location on error
+        setFormData(prev => ({ ...prev, location: null }));
+        
+        // Show manual entry option after failure
+        setTimeout(() => {
+          toast((t) => (
+            <div>
+              <p className="font-medium">Can't get location?</p>
+              <p className="text-sm">You can still submit without location</p>
+              <button 
+                onClick={() => toast.dismiss(t.id)}
+                className="mt-2 text-primary-600 text-sm"
+              >
+                OK, continue
+              </button>
+            </div>
+          ), { duration: 5000 });
+        }, 1000);
+      },
+      
+      options
+    );
   };
 
   const validateForm = () => {
@@ -219,33 +265,43 @@ const SubmitContribution = () => {
     setLoading(true);
     
     try {
-      // Prepare contribution data
+      // Only send location if it has valid coordinates
+      let locationToSend = null;
+      
+      if (formData.location && 
+          formData.location.coordinates && 
+          Array.isArray(formData.location.coordinates) && 
+          formData.location.coordinates.length === 2 &&
+          typeof formData.location.coordinates[0] === 'number' &&
+          typeof formData.location.coordinates[1] === 'number') {
+        locationToSend = {
+          type: "Point",
+          coordinates: formData.location.coordinates
+        };
+      }
+      
       const contributionData = {
         plasticType: formData.plasticType,
         quantity: parseFloat(formData.quantity),
         unit: formData.unit,
         collectionPoint: formData.collectionPoint,
         notes: formData.notes,
-        location: formData.location,
+        location: locationToSend,
       };
 
-      // Create the contribution first
       const response = await userService.createContribution(contributionData);
       
       if (response.success) {
         const contributionId = response.data._id;
 
-        // Upload images if any
         if (images.length > 0) {
           setUploadingImages(true);
           
-          // Prepare FormData for image upload
           const imageFormData = new FormData();
-          images.forEach((image, index) => {
+          images.forEach((image) => {
             imageFormData.append('images', image.file);
           });
 
-          // Upload images to the specific contribution
           const uploadResponse = await userService.uploadContributionImages(contributionId, imageFormData);
           
           if (uploadResponse.success) {
@@ -257,7 +313,6 @@ const SubmitContribution = () => {
 
         toast.success('Contribution submitted successfully!');
         
-        // Clean up object URLs
         images.forEach(image => {
           if (image.preview && image.preview.startsWith('blob:')) {
             URL.revokeObjectURL(image.preview);
@@ -269,14 +324,14 @@ const SubmitContribution = () => {
     } catch (error) {
       console.error('Error submitting contribution:', error);
       
-      // Handle specific error cases
       if (error.response?.status === 401) {
         toast.error('Session expired. Please login again.');
         navigate('/login');
       } else if (error.response?.status === 413) {
         toast.error('Images too large. Please reduce image sizes.');
       } else {
-        toast.error(error.response?.data?.message || 'Failed to submit contribution');
+        const errorMessage = error.response?.data?.message || 'Failed to submit contribution';
+        toast.error(errorMessage);
       }
     } finally {
       setLoading(false);
@@ -445,10 +500,71 @@ const SubmitContribution = () => {
                 <FaMapMarkerAlt />
                 <span>Capture Current Location</span>
               </button>
-              {formData.location && (
+              
+              {/* Manual Location Input - Fallback */}
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualLocation(!showManualLocation)}
+                  className="text-sm text-gray-500 hover:text-primary-600"
+                >
+                  {showManualLocation ? 'Hide manual entry' : 'Enter location manually'}
+                </button>
+                
+                {showManualLocation && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Latitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g., -15.3875"
+                        className="input-field text-sm"
+                        onChange={(e) => {
+                          const lat = parseFloat(e.target.value);
+                          const currentLng = formData.location?.coordinates?.[0] || 0;
+                          if (!isNaN(lat)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              location: {
+                                type: "Point",
+                                coordinates: [currentLng, lat]
+                              }
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Longitude</label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="e.g., 28.3228"
+                        className="input-field text-sm"
+                        onChange={(e) => {
+                          const lng = parseFloat(e.target.value);
+                          const currentLat = formData.location?.coordinates?.[1] || 0;
+                          if (!isNaN(lng)) {
+                            setFormData(prev => ({
+                              ...prev,
+                              location: {
+                                type: "Point",
+                                coordinates: [lng, currentLat]
+                              }
+                            }));
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {formData.location && formData.location.coordinates && (
                 <p className="mt-2 text-sm text-green-600 flex items-center">
                   <FaCheckCircle className="mr-1" /> 
-                  Location captured: {formData.location.coordinates[1].toFixed(4)}, {formData.location.coordinates[0].toFixed(4)}
+                  Location captured: {formData.location.coordinates[1].toFixed(6)}, {formData.location.coordinates[0].toFixed(6)}
                 </p>
               )}
             </div>
@@ -514,8 +630,6 @@ const SubmitContribution = () => {
                             className="w-full h-full object-cover"
                           />
                         </div>
-                        
-                        {/* Image overlay with delete button */}
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 rounded-lg flex items-center justify-center">
                           <button
                             type="button"
@@ -526,8 +640,6 @@ const SubmitContribution = () => {
                             <FaTrash size={12} />
                           </button>
                         </div>
-
-                        {/* Image info */}
                         <div className="absolute bottom-1 left-1 right-1">
                           <p className="text-xs bg-black bg-opacity-50 text-white px-1 py-0.5 rounded truncate">
                             {(image.size / 1024).toFixed(1)} KB
