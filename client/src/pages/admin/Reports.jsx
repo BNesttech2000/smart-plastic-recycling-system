@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import AdminLayout from '../../components/admin/AdminLayout';
 import {
   FaFileAlt,
   FaDownload,
@@ -17,10 +16,9 @@ import {
   FaTrash,
   FaSync,
   FaPlus,
-  FaChevronDown,
 } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, subDays, subMonths, subYears } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import {
   LineChart,
   Line,
@@ -40,7 +38,7 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 
-// Mock data for reports
+// Mock data - replace with real API calls
 const mockReports = [
   {
     id: 1,
@@ -72,29 +70,8 @@ const mockReports = [
     size: '3.2 MB',
     status: 'COMPLETED',
   },
-  {
-    id: 4,
-    title: 'Quarterly Report - Q1 2024',
-    type: 'QUARTERLY',
-    generatedDate: new Date(2024, 2, 16, 14, 20),
-    generatedBy: 'Admin User',
-    format: 'PDF',
-    size: '4.1 MB',
-    status: 'COMPLETED',
-  },
-  {
-    id: 5,
-    title: 'Custom Report - Jan 15 to Mar 15',
-    type: 'CUSTOM',
-    generatedDate: new Date(2024, 2, 15, 11, 0),
-    generatedBy: 'Admin User',
-    format: 'CSV',
-    size: '1.2 MB',
-    status: 'COMPLETED',
-  },
 ];
 
-// Mock chart data
 const contributionData = [
   { month: 'Jan', contributions: 450, weight: 1250, points: 8500 },
   { month: 'Feb', contributions: 520, weight: 1480, points: 10200 },
@@ -163,7 +140,6 @@ const Reports = () => {
 
   const handleGenerateReport = async () => {
     try {
-      // Replace with actual API call
       toast.success('Report generation started. You will be notified when ready.');
       setShowGenerateModal(false);
     } catch (error) {
@@ -203,16 +179,14 @@ const Reports = () => {
 
   if (loading) {
     return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      </AdminLayout>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
     );
   }
 
   return (
-    <AdminLayout>
+    <>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
@@ -256,12 +230,16 @@ const Reports = () => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <select className="input-field w-40">
-              <option>All Report Types</option>
-              <option>Daily Reports</option>
-              <option>Weekly Reports</option>
-              <option>Monthly Reports</option>
-              <option>Custom Reports</option>
+            <select 
+              value={selectedReportType}
+              onChange={(e) => setSelectedReportType(e.target.value)}
+              className="input-field w-40"
+            >
+              <option value="all">All Report Types</option>
+              <option value="DAILY">Daily Reports</option>
+              <option value="WEEKLY">Weekly Reports</option>
+              <option value="MONTHLY">Monthly Reports</option>
+              <option value="CUSTOM">Custom Reports</option>
             </select>
           </div>
         </div>
@@ -658,7 +636,7 @@ const Reports = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </AdminLayout>
+    </>
   );
 };
 

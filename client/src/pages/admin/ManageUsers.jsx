@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import AdminLayout from '../../components/admin/AdminLayout';
 import { adminService } from '../../services/adminService';
 import {
   FaSearch,
@@ -42,7 +41,6 @@ const ManageUsers = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Call the real API endpoint
       const response = await adminService.getUsers(currentPage, 10);
       if (response.success) {
         setUsers(response.data.users);
@@ -88,7 +86,6 @@ const ManageUsers = () => {
   const handleStatusChange = async (userId, currentStatus) => {
     try {
       const newStatus = !currentStatus;
-      // Call your API to update user status
       const response = await adminService.updateUserStatus(userId, newStatus);
       if (response.success) {
         setUsers(users.map(u => 
@@ -139,16 +136,14 @@ const ManageUsers = () => {
 
   if (loading) {
     return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      </AdminLayout>
+      <div className="flex items-center justify-center h-64">
+        <FaSpinner className="w-12 h-12 text-primary-500 animate-spin" />
+      </div>
     );
   }
 
   return (
-    <AdminLayout>
+    <>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <div>
@@ -227,7 +222,7 @@ const ManageUsers = () => {
                 <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Status</th>
                 <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Joined</th>
                 <th className="text-left py-4 px-6 text-sm font-medium text-gray-500">Actions</th>
-              </tr>
+               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredUsers.map((user) => (
@@ -250,7 +245,7 @@ const ManageUsers = () => {
                         <p className="text-sm text-gray-500">ID: {user._id?.slice(-6)}</p>
                       </div>
                     </div>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <div className="space-y-1">
                       <p className="flex items-center text-sm text-gray-600">
@@ -266,24 +261,24 @@ const ManageUsers = () => {
                         {user.address || 'Not provided'}
                       </p>
                     </div>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <div className="space-y-1">
                       <p className="text-sm text-gray-600">Points: {user.totalPoints || 0}</p>
                       <p className="text-sm text-gray-600">Contributions: {user.totalContributions || 0}</p>
                       <p className="text-sm text-gray-600">Weight: {user.totalWeight || 0} kg</p>
                     </div>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTierColor(user.rewardTier)}`}>
                       {user.rewardTier || 'Bronze'}
                     </span>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(user.isActive)}`}>
                       {user.isActive ? 'active' : 'inactive'}
                     </span>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <div className="space-y-1">
                       <p className="flex items-center text-sm text-gray-600">
@@ -291,7 +286,7 @@ const ManageUsers = () => {
                         {user.joinedDate ? format(new Date(user.joinedDate), 'MMM dd, yyyy') : 'N/A'}
                       </p>
                     </div>
-                  </td>
+                   </td>
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-2">
                       <button
@@ -326,7 +321,7 @@ const ManageUsers = () => {
                         <FaTrash />
                       </button>
                     </div>
-                  </td>
+                   </td>
                 </motion.tr>
               ))}
             </tbody>
@@ -497,7 +492,7 @@ const ManageUsers = () => {
           </motion.div>
         )}
       </AnimatePresence>
-    </AdminLayout>
+    </>
   );
 };
 
