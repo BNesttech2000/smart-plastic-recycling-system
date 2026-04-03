@@ -24,6 +24,8 @@ const contributionRoutes = require('./routes/contributionRoutes');
 const incentiveRoutes = require('./routes/incentiveRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
@@ -67,6 +69,8 @@ app.use('/api/contributions', contributionRoutes);
 app.use('/api/incentives', incentiveRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin/notifications', adminNotificationRoutes);
 
 // Base route
 app.get('/', (req, res) => {
