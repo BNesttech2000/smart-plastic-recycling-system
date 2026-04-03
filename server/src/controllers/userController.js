@@ -11,14 +11,12 @@ const { asyncHandler } = require('../middleware/errorMiddleware');
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, phone, address } = req.body;
 
-  // Check if user exists
   const userExists = await User.findOne({ email });
   if (userExists) {
     res.status(400);
     throw new Error('User already exists');
   }
 
-  // Create user
   const user = await User.create({
     name,
     email,
@@ -56,7 +54,6 @@ const loginUser = asyncHandler(async (req, res) => {
 
   console.log('🔍 Login attempt for:', email);
 
-  // Find user by email and include password field
   const user = await User.findOne({ email }).select('+password');
 
   if (!user) {
@@ -71,7 +68,6 @@ const loginUser = asyncHandler(async (req, res) => {
   console.log('Password match:', isMatch);
 
   if (isMatch) {
-    // Update last login
     user.lastLogin = new Date();
     await user.save();
 
@@ -200,7 +196,6 @@ const getUserIncentives = asyncHandler(async (req, res) => {
     .populate('contribution', 'plasticType quantity createdAt')
     .sort({ createdAt: -1 });
 
-  // Calculate summary statistics
   const summary = {
     totalPoints: req.user.totalPoints,
     totalAwarded: incentives.filter(i => i.rewardStatus === 'AWARDED').length,
@@ -218,86 +213,135 @@ const getUserIncentives = asyncHandler(async (req, res) => {
   });
 });
 
+// Helper function to get user rank
+const getUserRank = async (userId) => {
+  try {
+    const users = await User.find({ totalPoints: { $gt: 0 } })
+      .sort({ totalPoints: -1 })
+      .select('totalPoints');
+
+    if (users.length === 0) {
+      return { rank: 0, totalUsers: 0, percentile: 0 };
+    }
+
+    const rank = users.findIndex(u => u._id.toString() === userId.toString()) + 1;
+    const totalUsers = users.length;
+
+    return {
+      rank: rank > 0 ? rank : 0,
+      totalUsers,
+      percentile: totalUsers > 0 ? ((totalUsers - rank) / totalUsers * 100).toFixed(1) : 0
+    };
+  } catch (error) {
+    console.error('Error in getUserRank:', error);
+    return { rank: 0, totalUsers: 0, percentile: 0 };
+  }
+};
+
 // @desc    Get user statistics
 // @route   GET /api/users/statistics
 // @access  Private
 const getUserStatistics = asyncHandler(async (req, res) => {
-  const user = req.user;
+  try {
+    const user = req.user;
 
-  // Get monthly contributions for the last 6 months
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    // Get monthly contributions for the last 6 months
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-  const monthlyContributions = await PlasticContribution.aggregate([
-    {
-      $match: {
-        user: user._id,
-        createdAt: { $gte: sixMonthsAgo }
-      }
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$createdAt' },
-          month: { $month: '$createdAt' }
+    let monthlyContributions = [];
+    try {
+      monthlyContributions = await PlasticContribution.aggregate([
+        {
+          $match: {
+            user: user._id,
+            createdAt: { $gte: sixMonthsAgo }
+          }
         },
-        totalWeight: { $sum: '$quantity' },
-        count: { $sum: 1 },
-        totalPoints: { $sum: '$pointsEarned' }
-      }
-    },
-    { $sort: { '_id.year': 1, '_id.month': 1 } }
-  ]);
-
-  // Get plastic type breakdown
-  const plasticBreakdown = await PlasticContribution.aggregate([
-    {
-      $match: {
-        user: user._id,
-        status: 'approved'
-      }
-    },
-    {
-      $group: {
-        _id: '$plasticType',
-        totalWeight: { $sum: '$quantity' },
-        count: { $sum: 1 }
-      }
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' }
+            },
+            totalWeight: { $sum: '$quantity' },
+            count: { $sum: 1 },
+            totalPoints: { $sum: '$pointsEarned' }
+          }
+        },
+        { $sort: { '_id.year': 1, '_id.month': 1 } }
+      ]);
+    } catch (err) {
+      console.log('Error in monthly contributions:', err.message);
+      monthlyContributions = [];
     }
-  ]);
 
-  res.json({
-    success: true,
-    data: {
-      totalStats: {
-        contributions: user.totalContributions,
-        weight: user.totalWeight,
-        points: user.totalPoints,
-        rewardTier: user.rewardTier,
-        joinedDate: user.joinedDate
-      },
-      monthlyContributions,
-      plasticBreakdown,
-      rank: await getUserRank(user._id)
+    // Get plastic type breakdown
+    let plasticBreakdown = [];
+    try {
+      plasticBreakdown = await PlasticContribution.aggregate([
+        {
+          $match: {
+            user: user._id,
+            status: 'approved'
+          }
+        },
+        {
+          $group: {
+            _id: '$plasticType',
+            totalWeight: { $sum: '$quantity' },
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+    } catch (err) {
+      console.log('Error in plastic breakdown:', err.message);
+      plasticBreakdown = [];
     }
-  });
+
+    // Get user rank
+    let rank = { rank: 0, totalUsers: 0, percentile: 0 };
+    try {
+      rank = await getUserRank(user._id);
+    } catch (err) {
+      console.log('Error getting rank:', err.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        totalStats: {
+          contributions: user.totalContributions || 0,
+          weight: user.totalWeight || 0,
+          points: user.totalPoints || 0,
+          rewardTier: user.rewardTier || 'Bronze',
+          joinedDate: user.joinedDate || new Date()
+        },
+        monthlyContributions: monthlyContributions || [],
+        plasticBreakdown: plasticBreakdown || [],
+        rank: rank
+      }
+    });
+  } catch (error) {
+    console.error('Error in getUserStatistics:', error);
+    // Return default data instead of failing
+    res.json({
+      success: true,
+      data: {
+        totalStats: {
+          contributions: 0,
+          weight: 0,
+          points: 0,
+          rewardTier: 'Bronze',
+          joinedDate: new Date()
+        },
+        monthlyContributions: [],
+        plasticBreakdown: [],
+        rank: { rank: 0, totalUsers: 0, percentile: 0 }
+      }
+    });
+  }
 });
-
-// Helper function to get user rank
-const getUserRank = async (userId) => {
-  const users = await User.find({})
-    .sort({ totalPoints: -1 })
-    .select('totalPoints');
-
-  const rank = users.findIndex(u => u._id.toString() === userId.toString()) + 1;
-  const totalUsers = users.length;
-
-  return {
-    rank,
-    totalUsers,
-    percentile: ((totalUsers - rank) / totalUsers * 100).toFixed(1)
-  };
-};
 
 module.exports = {
   registerUser,

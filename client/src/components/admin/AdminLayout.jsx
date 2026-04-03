@@ -1,166 +1,4 @@
 // import React, { useState } from 'react';
-// import { Link, useLocation, Navigate } from 'react-router-dom';
-// import { useAuth } from '../../context/AuthContext';
-// import {
-//   FaTachometerAlt,
-//   FaUsers,
-//   FaRecycle,
-//   FaFileAlt,
-//   FaCog,
-//   FaSignOutAlt,
-//   FaBars,
-//   FaTimes,
-// } from 'react-icons/fa';
-// import { motion, AnimatePresence } from 'framer-motion';
-
-// const AdminLayout = ({ children }) => {
-//   const [sidebarOpen, setSidebarOpen] = useState(true);
-//   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-//   const { user, logout } = useAuth();
-//   const location = useLocation();
-
-//   if (!user || user.role !== 'admin') {
-//     return <Navigate to="/dashboard" replace />;
-//   }
-
-//   const navigation = [
-//     { name: 'Dashboard', href: '/admin', icon: FaTachometerAlt },
-//     { name: 'Manage Users', href: '/admin/users', icon: FaUsers },
-//     { name: 'Contributions', href: '/admin/contributions', icon: FaRecycle },
-//     { name: 'Reports', href: '/admin/reports', icon: FaFileAlt },
-//     { name: 'Settings', href: '/admin/settings', icon: FaCog },
-//   ];
-
-//   const isActive = (path) => location.pathname === path;
-
-//   return (
-//     <div className="min-h-screen bg-gray-100">
-//       {/* Desktop Sidebar */}
-//       <aside
-//         className={`fixed inset-y-0 left-0 bg-white shadow-lg transition-all duration-300 z-20 ${
-//           sidebarOpen ? 'w-64' : 'w-20'
-//         }`}
-//       >
-//         <div className="flex items-center justify-between h-16 px-4 border-b">
-//           {sidebarOpen && <h1 className="text-xl font-bold text-primary-600">Admin</h1>}
-//           <button
-//             onClick={() => setSidebarOpen(!sidebarOpen)}
-//             className="p-2 rounded-lg hover:bg-gray-100"
-//           >
-//             <FaBars />
-//           </button>
-//         </div>
-
-//         <nav className="p-4">
-//           {navigation.map((item) => (
-//             <Link
-//               key={item.name}
-//               to={item.href}
-//               className={`flex items-center ${sidebarOpen ? 'space-x-3 px-4' : 'justify-center'} py-3 rounded-lg mb-1 transition-colors ${
-//                 isActive(item.href)
-//                   ? 'bg-primary-50 text-primary-600'
-//                   : 'text-gray-700 hover:bg-gray-100'
-//               }`}
-//               title={!sidebarOpen ? item.name : ''}
-//             >
-//               <item.icon />
-//               {sidebarOpen && <span>{item.name}</span>}
-//             </Link>
-//           ))}
-//           <button
-//             onClick={logout}
-//             className={`flex items-center ${sidebarOpen ? 'space-x-3 px-4' : 'justify-center'} py-3 mt-4 w-full text-red-600 hover:bg-red-50 rounded-lg transition-colors`}
-//             title={!sidebarOpen ? 'Logout' : ''}
-//           >
-//             <FaSignOutAlt />
-//             {sidebarOpen && <span>Logout</span>}
-//           </button>
-//         </nav>
-//       </aside>
-
-//       {/* MAIN CONTENT - ADD margin-left to push it right */}
-//       <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
-//         {/* Mobile Menu Button */}
-//         <div className="lg:hidden fixed top-4 left-4 z-30">
-//           <button
-//             onClick={() => setMobileSidebarOpen(true)}
-//             className="p-2 bg-white rounded-lg shadow-lg hover:bg-gray-100"
-//           >
-//             <FaBars className="text-gray-600" />
-//           </button>
-//         </div>
-
-//         {/* Mobile Sidebar (Overlay) */}
-//         <AnimatePresence>
-//           {mobileSidebarOpen && (
-//             <>
-//               <motion.div
-//                 initial={{ opacity: 0 }}
-//                 animate={{ opacity: 1 }}
-//                 exit={{ opacity: 0 }}
-//                 onClick={() => setMobileSidebarOpen(false)}
-//                 className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-//               />
-//               <motion.aside
-//                 initial={{ x: -300 }}
-//                 animate={{ x: 0 }}
-//                 exit={{ x: -300 }}
-//                 transition={{ type: 'tween' }}
-//                 className="fixed top-0 left-0 h-full w-64 bg-white shadow-xl z-50 lg:hidden"
-//               >
-//                 <div className="flex items-center justify-between p-4 border-b">
-//                   <span className="text-xl font-bold text-primary-600">Admin</span>
-//                   <button
-//                     onClick={() => setMobileSidebarOpen(false)}
-//                     className="p-2 rounded-lg hover:bg-gray-100"
-//                   >
-//                     <FaTimes />
-//                   </button>
-//                 </div>
-//                 <nav className="p-4">
-//                   {navigation.map((item) => (
-//                     <Link
-//                       key={item.name}
-//                       to={item.href}
-//                       onClick={() => setMobileSidebarOpen(false)}
-//                       className={`flex items-center space-x-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
-//                         isActive(item.href)
-//                           ? 'bg-primary-50 text-primary-600'
-//                           : 'text-gray-700 hover:bg-gray-100'
-//                       }`}
-//                     >
-//                       <item.icon />
-//                       <span>{item.name}</span>
-//                     </Link>
-//                   ))}
-//                   <button
-//                     onClick={() => {
-//                       logout();
-//                       setMobileSidebarOpen(false);
-//                     }}
-//                     className="w-full flex items-center space-x-3 px-4 py-3 mt-4 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-//                   >
-//                     <FaSignOutAlt />
-//                     <span>Logout</span>
-//                   </button>
-//                 </nav>
-//               </motion.aside>
-//             </>
-//           )}
-//         </AnimatePresence>
-
-//         {/* Page Content */}
-//         <main className="p-6">
-//           {children}
-//         </main>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default AdminLayout;
-
-
 import React, { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -172,6 +10,7 @@ import {
   FaCog,
   FaSignOutAlt,
   FaBars,
+  FaBell,
 } from 'react-icons/fa';
 
 const AdminLayout = ({ children }) => {
@@ -188,6 +27,7 @@ const AdminLayout = ({ children }) => {
     { name: 'Manage Users', href: '/admin/users', icon: FaUsers },
     { name: 'Contributions', href: '/admin/contributions', icon: FaRecycle },
     { name: 'Reports', href: '/admin/reports', icon: FaFileAlt },
+    { name: 'Notifications', href: '/admin/notifications', icon: FaBell },
     { name: 'Settings', href: '/admin/settings', icon: FaCog },
   ];
 
