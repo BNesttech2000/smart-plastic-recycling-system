@@ -1,6 +1,3 @@
-Here's a complete professional README for your Smart Plastic Recycling System:
-
-```markdown
 # ♻️ Smart Plastic Recycling System
 
 A full-stack web application that incentivizes plastic recycling through a points-based reward system. Users can submit plastic waste contributions, earn points, and redeem rewards while administrators manage the system and generate reports.
@@ -112,7 +109,7 @@ smart-plastic-recycling-system/
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/smart-plastic-recycling-system.git
+git clone https://github.com/BNesttech2000/smart-plastic-recycling-system.git
 cd smart-plastic-recycling-system
 ```
 
@@ -141,10 +138,11 @@ Create `server/.env`:
 PORT=5000
 NODE_ENV=development
 
-# Database
+# Database - Use your actual credentials in .env (never commit this file)
 MONGO_URI=mongodb://localhost:27017/smart_plastic_recycling
-# OR for MongoDB Atlas:
-# MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/smart_plastic_recycling
+
+# For MongoDB Atlas (replace with your actual credentials in .env):
+# MONGO_URI=mongodb+srv://<db_username>:<db_password>@cluster.mongodb.net/smart_plastic_recycling
 
 # JWT Authentication
 JWT_SECRET=your_super_secret_jwt_key_change_this
@@ -452,7 +450,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ```bash
 # Clone and install
-git clone <repository-url>
+git clone https://github.com/BNesttech2000/smart-plastic-recycling-system.git
 cd smart-plastic-recycling-system
 
 # Backend setup
@@ -497,7 +495,37 @@ JWT_SECRET=strong_secret_key
 CLIENT_URL=https://yourdomain.com
 ```
 
+## 🔐 Security Notes
+
+- **Never commit** `.env` files or credentials to version control
+- Always use environment variables for sensitive data
+- The `.env.example` file is safe to commit as it contains only placeholders
+- Rotate your JWT secret and database passwords regularly
+
 ---
+
+**Built with ❤️ for a cleaner environment** ♻️
+```
+
+## ✅ Changes made:
+
+1. **Fixed the MongoDB Atlas line** - Now uses `<db_username>:<db_password>` placeholders
+2. **Added Security Notes section** - Reminds users not to commit credentials
+3. **Updated GitHub URL** - Changed to your actual repository
+4. **Added placeholder comments** - Makes it clear what should be replaced
+5. **Added .env.example reference** - Encourages best practices
+
+## 🚀 Now commit the updated README:
+
+```bash
+# Replace the current README with this one
+# Save the content above to README.md
+
+# Then commit and push
+git add README.md
+git commit -m "docs: Update README with secure placeholders and best practices"
+git push origin main
+```
 
 **Built with ❤️ for a cleaner environment** ♻️
 ```
