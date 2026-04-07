@@ -2,11 +2,13 @@
 const PlasticContribution = require('../models/PlasticContribution');
 const User = require('../models/User');
 const Incentive = require('../models/Incentive');
-const { asyncHandler } = require('../middleware/errorMiddleware');
+const { asyncHandler } = require('../middleware/errorMiddleware');  // ← ADD THIS LINE
 const { calculateIncentivePoints } = require('../utils/incentiveCalculator');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+
+// ... rest of your code
 
 // @desc    Create a new contribution
 // @route   POST /api/contributions
@@ -78,12 +80,25 @@ const createContribution = asyncHandler(async (req, res) => {
     description: `Points earned for ${quantity}kg of ${plasticType} plastic`
   });
 
+  // Emit WebSocket event for real-time notification
+  try {
+    const { emitNewContribution } = require('../socket/socketManager');
+    await emitNewContribution(contribution);
+    console.log(`📡 WebSocket: New contribution notification sent for ${contribution._id}`);
+  } catch (socketError) {
+    console.error('WebSocket emit error (non-critical):', socketError.message);
+    // Don't fail the request if socket emit fails
+  }
+
   res.status(201).json({
     success: true,
     data: contribution,
     message: 'Contribution submitted successfully. Pending approval.'
   });
 });
+
+
+
 
 // @desc    Get all contributions
 // @route   GET /api/contributions
@@ -164,57 +179,10 @@ const getContributionById = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Update contribution status
+
+// @desc    Update contribution status (approve/reject)
 // @route   PUT /api/contributions/:id/status
 // @access  Private/Admin
-// const updateContributionStatus = asyncHandler(async (req, res) => {
-//   const { status, rejectionReason } = req.body;
-//   const contribution = await PlasticContribution.findById(req.params.id);
-
-//   if (!contribution) {
-//     res.status(404);
-//     throw new Error('Contribution not found');
-//   }
-
-//   contribution.status = status;
-  
-//   if (status === 'approved') {
-//     contribution.approvedBy = req.admin._id;
-//     contribution.approvedDate = new Date();
-
-//     const user = await User.findById(contribution.user);
-//     user.totalPoints += contribution.pointsEarned;
-//     user.totalWeight += contribution.quantity;
-//     user.totalContributions += 1;
-//     user.lastContribution = new Date();
-//     user.updateRewardTier();
-//     await user.save();
-
-//     await Incentive.findOneAndUpdate(
-//       { contribution: contribution._id },
-//       { rewardStatus: 'AWARDED', awardedDate: new Date() }
-//     );
-
-//   } else if (status === 'rejected') {
-//     contribution.rejectionReason = rejectionReason;
-//     await Incentive.findOneAndUpdate(
-//       { contribution: contribution._id },
-//       { rewardStatus: 'CANCELLED' }
-//     );
-//   }
-
-//   await contribution.save();
-
-//   res.json({
-//     success: true,
-//     data: contribution,
-//     message: `Contribution ${status} successfully`
-//   });
-// });
-
-
-
-
 const updateContributionStatus = asyncHandler(async (req, res) => {
   const { status, rejectionReason } = req.body;
   const contribution = await PlasticContribution.findById(req.params.id);
@@ -224,25 +192,29 @@ const updateContributionStatus = asyncHandler(async (req, res) => {
     throw new Error('Contribution not found');
   }
 
-  // Update status
   contribution.status = status;
   
   if (status === 'approved') {
-    contribution.approvedBy = req.user._id; // Use req.user instead of req.admin
+    contribution.approvedBy = req.user._id;
     contribution.approvedDate = new Date();
 
-    // Update user's total points and weight
     const user = await User.findById(contribution.user);
     if (user) {
-      user.totalPoints += contribution.pointsEarned;
-      user.totalWeight += contribution.quantity;
-      user.totalContributions += 1;
+      user.totalPoints = (user.totalPoints || 0) + (contribution.pointsEarned || 0);
+      user.totalWeight = (user.totalWeight || 0) + (contribution.quantity || 0);
+      user.totalContributions = (user.totalContributions || 0) + 1;
       user.lastContribution = new Date();
       user.updateRewardTier();
       await user.save();
+      
+      console.log(`✅ Updated user ${user.name}:`, {
+        points: user.totalPoints,
+        weight: user.totalWeight,
+        contributions: user.totalContributions,
+        tier: user.rewardTier
+      });
     }
 
-    // Update associated incentive
     await Incentive.findOneAndUpdate(
       { contribution: contribution._id },
       { 
@@ -254,7 +226,6 @@ const updateContributionStatus = asyncHandler(async (req, res) => {
   } else if (status === 'rejected') {
     contribution.rejectionReason = rejectionReason;
     
-    // Update associated incentive
     await Incentive.findOneAndUpdate(
       { contribution: contribution._id },
       { rewardStatus: 'CANCELLED' }
@@ -263,50 +234,300 @@ const updateContributionStatus = asyncHandler(async (req, res) => {
 
   await contribution.save();
 
+  // Emit WebSocket events for real-time updates
+  try {
+    const { emitContributionUpdate, emitStatsUpdate } = require('../socket/socketManager');
+    await emitContributionUpdate(contribution._id, status);
+    
+    // Fetch updated stats and emit
+    const PlasticContribution = require('../models/PlasticContribution');
+    const User = require('../models/User');
+    
+    const totalApproved = await PlasticContribution.countDocuments({ status: 'approved' });
+    const weightResult = await PlasticContribution.aggregate([
+      { $match: { status: 'approved' } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } }
+    ]);
+    const totalWeight = weightResult[0]?.total || 0;
+    const pointsResult = await User.aggregate([
+      { $group: { _id: null, total: { $sum: '$totalPoints' } } }
+    ]);
+    const totalPoints = pointsResult[0]?.total || 0;
+    
+    await emitStatsUpdate({ totalApproved, totalWeight, totalPoints });
+  } catch (socketError) {
+    console.error('WebSocket emit error:', socketError);
+    // Don't fail the request if socket emit fails
+  }
+
   res.json({
     success: true,
     data: contribution,
     message: `Contribution ${status} successfully`
   });
 });
-// @desc    Get contribution statistics - FIXED
+
+
+// @desc    Get contribution statistics for dashboard (OPTIMIZED)
 // @route   GET /api/contributions/statistics
 // @access  Private/Admin
 const getContributionStatistics = asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const total = await PlasticContribution.countDocuments() || 0;
-    const totalApproved = await PlasticContribution.countDocuments({ status: 'approved' }) || 0;
+    const { range = 'month' } = req.query;
     
-    let totalWeight = 0;
-    const weightResult = await PlasticContribution.aggregate([
-      { $match: { status: 'approved' } },
-      { $group: { _id: null, total: { $sum: '$quantity' } } }
+    // Calculate date range
+    let startDate = new Date();
+    if (range === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (range === 'month') startDate.setDate(startDate.getDate() - 30);
+    else if (range === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Run ALL queries in PARALLEL - this is the key optimization
+    const [
+      total,
+      totalApproved,
+      weightResult,
+      pointsResult,
+      timeline,
+      statusBreakdown,
+      typeBreakdown,
+      topContributors,
+      recentActivity
+    ] = await Promise.all([
+      // 1. Total contributions count
+      PlasticContribution.countDocuments(),
+      
+      // 2. Total approved count
+      PlasticContribution.countDocuments({ status: 'approved' }),
+      
+      // 3. Total weight from approved contributions
+      PlasticContribution.aggregate([
+        { $match: { status: 'approved' } },
+        { $group: { _id: null, total: { $sum: '$quantity' } } }
+      ]),
+      
+      // 4. Total points from users
+      User.aggregate([
+        { $group: { _id: null, total: { $sum: '$totalPoints' } } }
+      ]),
+      
+      // 5. Timeline data (limited to 31 days)
+      PlasticContribution.aggregate([
+        { 
+          $match: { 
+            createdAt: { $gte: startDate },
+            status: 'approved'
+          } 
+        },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+            count: { $sum: 1 },
+            totalWeight: { $sum: '$quantity' }
+          }
+        },
+        { $sort: { _id: 1 } },
+        { $limit: 31 }
+      ]),
+      
+      // 6. Status breakdown (lightweight)
+      PlasticContribution.aggregate([
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
+      
+      // 7. Plastic type breakdown (limited to top 6)
+      PlasticContribution.aggregate([
+        { $match: { status: 'approved' } },
+        {
+          $group: {
+            _id: "$plasticType",
+            count: { $sum: 1 },
+            totalWeight: { $sum: '$quantity' }
+          }
+        },
+        { $sort: { totalWeight: -1 } },
+        { $limit: 6 }
+      ]),
+      
+      // 8. Top contributors (limited to 5)
+      User.find({ totalContributions: { $gt: 0 } })
+        .sort({ totalPoints: -1 })
+        .limit(5)
+        .select('name totalContributions totalWeight totalPoints lastContribution')
+        .lean(),
+      
+      // 9. Recent activity (limited to 5)
+      PlasticContribution.find()
+        .populate('user', 'name')
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean()
     ]);
-    totalWeight = weightResult[0]?.total || 0;
+
+    const totalWeight = weightResult[0]?.total || 0;
+    const totalPoints = pointsResult[0]?.total || 0;
+
+    const formattedActivity = recentActivity.map(activity => ({
+      id: activity._id,
+      user: activity.user?.name || 'Unknown User',
+      action: `submitted ${activity.quantity}kg of ${activity.plasticType}`,
+      timestamp: activity.createdAt,
+      status: activity.status
+    }));
+
+    const endTime = Date.now();
+    console.log(`✅ Dashboard loaded in ${endTime - startTime}ms (${range} range)`);
 
     res.json({
       success: true,
       data: {
-        timeline: [],
-        statusBreakdown: [],
-        typeBreakdown: [],
-        total: total,
-        totalApproved: totalApproved,
-        totalWeight: totalWeight
+        timeline: timeline || [],
+        statusBreakdown: statusBreakdown || [],
+        typeBreakdown: typeBreakdown || [],
+        total: total || 0,
+        totalApproved: totalApproved || 0,
+        totalWeight: totalWeight || 0,
+        totalPoints: totalPoints || 0,
+        userEngagement: {
+          topContributors: topContributors.map(u => ({
+            name: u.name,
+            email: u.email,
+            count: u.totalContributions || 0,
+            totalWeight: u.totalWeight || 0,
+            totalPoints: u.totalPoints || 0,
+            lastActive: u.lastContribution || '-'
+          }))
+        },
+        recentActivity: formattedActivity || []
       }
     });
+    
   } catch (error) {
     console.error('Statistics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch statistics',
+      error: error.message
+    });
+  }
+});
+
+
+
+
+
+
+
+// @desc    Get admin dashboard statistics (simplified and reliable)
+// @route   GET /api/admin/dashboard-stats
+// @access  Private/Admin
+const getAdminDashboardStats = asyncHandler(async (req, res) => {
+  try {
+    const { range = 'month' } = req.query;
+    
+    let startDate = new Date();
+    if (range === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (range === 'month') startDate.setDate(startDate.getDate() - 30);
+    else if (range === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
+    else startDate.setDate(startDate.getDate() - 30);
+    
+    startDate.setHours(0, 0, 0, 0);
+
+    const totalUsers = await User.countDocuments();
+    const totalContributions = await PlasticContribution.countDocuments();
+    const totalApproved = await PlasticContribution.countDocuments({ status: 'approved' });
+    
+    const contributions = await PlasticContribution.find({ status: 'approved' });
+    let totalWeight = 0;
+    contributions.forEach(c => totalWeight += c.quantity || 0);
+    
+    const users = await User.find({});
+    let totalPoints = 0;
+    users.forEach(u => totalPoints += u.totalPoints || 0);
+
+    console.log('Admin Dashboard Stats:', { 
+      totalUsers, totalContributions, totalApproved, 
+      totalWeight: `${totalWeight} kg`, totalPoints 
+    });
+
+    const timeline = await PlasticContribution.aggregate([
+      { 
+        $match: { 
+          createdAt: { $gte: startDate },
+          status: 'approved'
+        } 
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+          totalWeight: { $sum: '$quantity' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const statusBreakdown = await PlasticContribution.aggregate([
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const typeBreakdown = await PlasticContribution.aggregate([
+      { $match: { status: 'approved' } },
+      {
+        $group: {
+          _id: "$plasticType",
+          count: { $sum: 1 },
+          totalWeight: { $sum: '$quantity' }
+        }
+      },
+      { $sort: { totalWeight: -1 } }
+    ]);
+
+    const topContributors = await User.find({ totalContributions: { $gt: 0 } })
+      .sort({ totalPoints: -1 })
+      .limit(10)
+      .select('name totalContributions totalWeight totalPoints lastContribution');
+
+    const recentActivity = await PlasticContribution.find()
+      .populate('user', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    const formattedActivity = recentActivity.map(activity => ({
+      id: activity._id,
+      user: activity.user?.name || 'Unknown',
+      action: `${activity.status === 'approved' ? '✅' : '⏳'} ${activity.quantity}kg of ${activity.plasticType}`,
+      timestamp: activity.createdAt
+    }));
+
     res.json({
       success: true,
       data: {
-        timeline: [],
-        statusBreakdown: [],
-        typeBreakdown: [],
-        total: 0,
-        totalApproved: 0,
-        totalWeight: 0
+        timeline,
+        statusBreakdown,
+        typeBreakdown,
+        total: totalContributions,
+        totalApproved,
+        totalWeight,
+        totalPoints,
+        totalUsers,
+        userEngagement: { topContributors },
+        recentActivity: formattedActivity
       }
+    });
+  } catch (error) {
+    console.error('Admin dashboard error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 });
@@ -390,6 +611,7 @@ module.exports = {
   getContributionById,
   updateContributionStatus,
   getContributionStatistics,
+  getAdminDashboardStats,
   uploadContributionImages,
   deleteContributionImage
 };

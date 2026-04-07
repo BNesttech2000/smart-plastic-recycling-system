@@ -7,6 +7,7 @@ const {
   getContributionById,
   updateContributionStatus,
   getContributionStatistics,
+  getAdminDashboardStats,
   uploadContributionImages,
   deleteContributionImage
 } = require('../controllers/contributionController');
@@ -33,6 +34,7 @@ router.delete('/:id/images/:imageId', deleteContributionImage);
 // Admin routes
 router.get('/', admin, getContributions);
 router.get('/statistics', admin, getContributionStatistics);
+router.get('/admin/dashboard-stats', admin, getAdminDashboardStats);
 router.get('/:id', getContributionById);
 router.put('/:id/status', admin, updateContributionStatus);
 

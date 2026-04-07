@@ -1,9 +1,17 @@
 import api from './api';
 
 export const adminService = {
-  getDashboard: async () => {
-    const response = await api.get('/contributions/statistics');
-    return response.data;
+  getDashboard: async (range = 'month') => {
+    try {
+      // Try the new admin endpoint first
+      const response = await api.get(`/admin/dashboard-stats?range=${range}`);
+      return response.data;
+    } catch (error) {
+      console.log('Falling back to statistics endpoint');
+      // Fall back to old endpoint
+      const response = await api.get(`/contributions/statistics?range=${range}`);
+      return response.data;
+    }
   },
 
   getUsers: async (page = 1, limit = 10) => {

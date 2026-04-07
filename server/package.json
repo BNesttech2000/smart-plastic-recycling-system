@@ -46,7 +46,7 @@
     "nodemailer": "^6.9.4",
     "pdfkit": "^0.14.0",
     "sharp": "^0.33.5",
-    "socket.io": "^4.6.1",
+    "socket.io": "^4.8.3",
     "twilio": "^4.14.0",
     "uuid": "^9.0.0",
     "winston": "^3.10.0",

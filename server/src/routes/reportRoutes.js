@@ -1,4 +1,3 @@
-// server/src/routes/reportRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
@@ -9,9 +8,9 @@ const {
   deleteReport,
   getReportTemplates
 } = require('../controllers/reportController');
-const { admin } = require('../middleware/authMiddleware');
+const { protect, admin } = require('../middleware/authMiddleware');
 
-// All routes require admin authentication
+router.use(protect);
 router.use(admin);
 
 router.route('/')

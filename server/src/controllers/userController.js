@@ -46,6 +46,7 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 });
 
+
 // @desc    Login user
 // @route   POST /api/users/login
 // @access  Public
@@ -64,10 +65,29 @@ const loginUser = asyncHandler(async (req, res) => {
 
   console.log('✅ User found, checking password...');
   
-  const isMatch = await user.matchPassword(password);
-  console.log('Password match:', isMatch);
+  let isMatch = false;
+  
+  // Check if password is hashed or plain text
+  if (user.password && user.password.startsWith('$2a$')) {
+    // It's a bcrypt hash
+    isMatch = await user.matchPassword(password);
+    console.log('Bcrypt password match:', isMatch);
+  } else {
+    // It's plain text password
+    isMatch = (user.password === password);
+    console.log('Plain text password match:', isMatch);
+  }
+  
+  console.log('Password match result:', isMatch);
 
   if (isMatch) {
+    // If password was plain text, we should hash it for security
+    if (!user.password.startsWith('$2a$')) {
+      user.password = password; // This will trigger the pre-save hook to hash it
+      await user.save();
+      console.log('✅ Password hashed and updated in database');
+    }
+    
     user.lastLogin = new Date();
     await user.save();
 
@@ -94,6 +114,7 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new Error('Invalid email or password');
   }
 });
+
 
 // @desc    Get user profile
 // @route   GET /api/users/profile

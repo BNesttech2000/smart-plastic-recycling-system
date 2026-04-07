@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { adminService } from '../../services/adminService';
+import { exportService } from '../../services/exportService';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import DateRangePicker from '../../components/admin/DateRangePicker';
 import {
   FaUsers,
   FaRecycle,
@@ -8,10 +11,13 @@ import {
   FaArrowUp,
   FaArrowDown,
   FaDownload,
+  FaFileCsv,
+  FaFileExcel,
+  FaFilePdf,
+  FaChartLine,
+  FaWifi,
 } from 'react-icons/fa';
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   PieChart,
@@ -21,14 +27,18 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   AreaChart,
   Area,
+  LineChart,
+  Line,
+  ComposedChart,
+  Legend,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { format, subDays } from 'date-fns';
+import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899'];
 
@@ -42,20 +52,46 @@ const AdminDashboard = () => {
     totalApproved: 0,
     totalWeight: 0,
     totalPoints: 0,
-    userEngagement: { topContributors: [] }
+    totalUsers: 0,
+    userEngagement: { topContributors: [] },
+    recentActivity: []
   });
-  const [dateRange, setDateRange] = useState('week');
+  const [dateRange, setDateRange] = useState('month');
+  const [monthlyTrends, setMonthlyTrends] = useState([]);
+  const [categoryComparison, setCategoryComparison] = useState([]);
+  const [customDateRange, setCustomDateRange] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  
+  // WebSocket for real-time updates
+  const { isConnected, lastMessage } = useWebSocket();
 
   useEffect(() => {
     fetchDashboardData();
+    fetchMonthlyTrends();
+    fetchCategoryComparison();
   }, [dateRange]);
 
-  const fetchDashboardData = async () => {
+  // Refresh data when WebSocket message received
+  useEffect(() => {
+    if (lastMessage) {
+      fetchDashboardData();
+      fetchMonthlyTrends();
+      fetchCategoryComparison();
+      toast.info('Dashboard updated with new data!', {
+        icon: '🔄',
+        duration: 3000,
+      });
+    }
+  }, [lastMessage]);
+
+  const fetchDashboardData = async (startDate, endDate) => {
     setLoading(true);
     try {
-      const response = await adminService.getDashboard();
+      const response = await adminService.getDashboard(dateRange);
       if (response.success) {
         setStats(response.data);
+      } else {
+        toast.error(response.message || 'Failed to load dashboard data');
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -65,10 +101,71 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchMonthlyTrends = async () => {
+    try {
+      const response = await api.get('/charts/monthly-trends');
+      if (response.data.success) {
+        setMonthlyTrends(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching monthly trends:', error);
+    }
+  };
+
+  const fetchCategoryComparison = async () => {
+    try {
+      const response = await api.get('/charts/category-comparison');
+      if (response.data.success) {
+        setCategoryComparison(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching category comparison:', error);
+    }
+  };
+
+  const handleExport = async (type, format) => {
+    try {
+      toast.loading(`Exporting ${type} as ${format.toUpperCase()}...`, {
+        id: 'export-toast',
+      });
+      
+      if (type === 'contributions') {
+        if (format === 'csv') {
+          await exportService.exportContributionsCSV(customDateRange || {});
+        } else if (format === 'excel') {
+          await exportService.exportContributionsExcel(customDateRange || {});
+        }
+      } else if (type === 'users') {
+        await exportService.exportUsersCSV();
+      } else if (type === 'report') {
+        await exportService.exportReportPDF(
+          customDateRange?.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          customDateRange?.end || new Date(),
+          'summary'
+        );
+      }
+      
+      toast.success(`Export completed: ${type}.${format}`, {
+        id: 'export-toast',
+      });
+      setShowExportMenu(false);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Export failed. Please try again.', {
+        id: 'export-toast',
+      });
+    }
+  };
+
+  const handleDateRangeApply = (range) => {
+    setCustomDateRange(range);
+    fetchDashboardData(range.start, range.end);
+  };
+
   const summaryCards = [
     {
       title: 'Total Users',
-      value: stats?.total?.toLocaleString() || '0',
+      value: (stats?.totalUsers || stats?.total || 0).toLocaleString(),
       change: '+12.5%',
       trend: 'up',
       icon: FaUsers,
@@ -76,7 +173,7 @@ const AdminDashboard = () => {
     },
     {
       title: 'Total Contributions',
-      value: stats?.totalApproved?.toLocaleString() || '0',
+      value: (stats?.totalApproved || stats?.total || 0).toLocaleString(),
       change: '+8.2%',
       trend: 'up',
       icon: FaRecycle,
@@ -84,7 +181,7 @@ const AdminDashboard = () => {
     },
     {
       title: 'Total Weight',
-      value: `${(stats?.totalWeight / 1000)?.toFixed(1) || '0'}T`,
+      value: `${(stats?.totalWeight || 0).toFixed(1)} kg`,
       change: '+15.3%',
       trend: 'up',
       icon: FaWeightHanging,
@@ -92,7 +189,7 @@ const AdminDashboard = () => {
     },
     {
       title: 'Total Points',
-      value: stats?.totalPoints?.toLocaleString() || '0',
+      value: (stats?.totalPoints || 0).toLocaleString(),
       change: '-2.1%',
       trend: 'down',
       icon: FaTrophy,
@@ -100,7 +197,6 @@ const AdminDashboard = () => {
     },
   ];
 
-  // Loading Skeleton
   if (loading) {
     return (
       <div className="animate-pulse">
@@ -111,7 +207,7 @@ const AdminDashboard = () => {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {[1, 2, 3, 4].map(i => (
+          {[1, 2, 3, 4, 5, 6].map(i => (
             <div key={i} className="bg-gray-200 rounded-lg h-80"></div>
           ))}
         </div>
@@ -128,6 +224,16 @@ const AdminDashboard = () => {
           <p className="text-gray-600">Welcome back, Administrator</p>
         </div>
         <div className="flex items-center space-x-4 mt-4 md:mt-0">
+          {/* Real-time status indicator */}
+          <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-lg">
+            <FaWifi className={isConnected ? 'text-green-500' : 'text-red-500'} />
+            <span className="text-xs text-gray-600">
+              {isConnected ? 'Live' : 'Offline'}
+            </span>
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          </div>
+          
+          {/* Date range buttons */}
           <div className="flex items-center space-x-2 bg-gray-100 rounded-lg shadow-sm p-1">
             {['week', 'month', 'year'].map((range) => (
               <button
@@ -135,7 +241,7 @@ const AdminDashboard = () => {
                 onClick={() => setDateRange(range)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   dateRange === range
-                    ? 'bg-primary-600 text-white'
+                    ? 'bg-blue-600 text-white'
                     : 'text-gray-600 hover:bg-gray-200'
                 }`}
               >
@@ -143,15 +249,62 @@ const AdminDashboard = () => {
               </button>
             ))}
           </div>
-          <button 
-            onClick={() => toast.info('Export feature coming soon')}
-            className="flex items-center space-x-2 bg-gray-100 text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-200 transition-colors"
-          >
-            <FaDownload />
-            <span>Export</span>
-          </button>
+          
+          {/* Export dropdown */}
+          <div className="relative">
+            <button 
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              <FaDownload />
+              <span>Export</span>
+            </button>
+            
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                <div className="py-2">
+                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b">Contributions</div>
+                  <button
+                    onClick={() => handleExport('contributions', 'csv')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <FaFileCsv className="text-green-600" />
+                    <span>Export as CSV</span>
+                  </button>
+                  <button
+                    onClick={() => handleExport('contributions', 'excel')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <FaFileExcel className="text-green-700" />
+                    <span>Export as Excel</span>
+                  </button>
+                  
+                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-t mt-1">Users</div>
+                  <button
+                    onClick={() => handleExport('users', 'csv')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <FaFileCsv className="text-blue-600" />
+                    <span>Export Users</span>
+                  </button>
+                  
+                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-t mt-1">Reports</div>
+                  <button
+                    onClick={() => handleExport('report', 'pdf')}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center space-x-2"
+                  >
+                    <FaFilePdf className="text-red-600" />
+                    <span>Generate PDF Report</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Date Range Picker */}
+      <DateRangePicker onApply={handleDateRangeApply} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -202,7 +355,7 @@ const AdminDashboard = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Status Breakdown */}
+        {/* Contribution Status */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-base font-semibold text-gray-800 mb-4">Contribution Status</h3>
           <ResponsiveContainer width="100%" height={280}>
@@ -212,7 +365,7 @@ const AdminDashboard = () => {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) => percent > 0 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
                 outerRadius={90}
                 fill="#8884d8"
                 dataKey="count"
@@ -234,7 +387,7 @@ const AdminDashboard = () => {
             <BarChart data={stats?.typeBreakdown || []} layout="vertical" margin={{ left: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis type="number" tick={{ fontSize: 12, fill: '#6b7280' }} />
-              <YAxis type="category" dataKey="_id" tick={{ fontSize: 12, fill: '#6b7280' }} width={50} />
+              <YAxis type="category" dataKey="_id" tick={{ fontSize: 12, fill: '#6b7280' }} width={80} />
               <Tooltip />
               <Bar dataKey="totalWeight" fill="#0ea5e9" name="Weight (kg)" radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -244,12 +397,60 @@ const AdminDashboard = () => {
         {/* Recent Activity */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-base font-semibold text-gray-800 mb-4">Recent Activity</h3>
-          <div className="space-y-3">
-            <div className="text-center py-8 text-gray-500">
-              No recent activity
-            </div>
+          <div className="space-y-3 max-h-[280px] overflow-y-auto">
+            {!stats?.recentActivity || stats.recentActivity.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">No recent activity</div>
+            ) : (
+              stats.recentActivity.map((activity, idx) => (
+                <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100">
+                  <div>
+                    <span className="font-medium text-gray-800">{activity.user}</span>
+                    <span className="text-gray-600 ml-2">{activity.action}</span>
+                  </div>
+                  <span className="text-xs text-gray-400">
+                    {format(new Date(activity.timestamp), 'MMM dd, h:mm a')}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Monthly Trends Chart - NEW */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-800">Monthly Trends</h3>
+          <FaChartLine className="text-gray-400" />
+        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <ComposedChart data={monthlyTrends}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} />
+            <YAxis yAxisId="left" tick={{ fontSize: 12, fill: '#6b7280' }} />
+            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12, fill: '#6b7280' }} />
+            <Tooltip />
+            <Legend />
+            <Bar yAxisId="left" dataKey="weight" fill="#0ea5e9" name="Weight (kg)" radius={[4, 4, 0, 0]} />
+            <Line yAxisId="right" type="monotone" dataKey="points" stroke="#10b981" name="Points" strokeWidth={2} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Category Comparison Chart - NEW */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
+        <h3 className="text-base font-semibold text-gray-800 mb-4">Category Comparison</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={categoryComparison}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="type" tick={{ fontSize: 12, fill: '#6b7280' }} />
+            <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="weight" fill="#0ea5e9" name="Weight (kg)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="points" fill="#f59e0b" name="Points" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Top Contributors */}
@@ -267,22 +468,26 @@ const AdminDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {(stats?.userEngagement?.topContributors || []).length === 0 ? (
+              {!stats?.userEngagement?.topContributors || stats.userEngagement.topContributors.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="text-center py-8 text-gray-500">No contributors yet</td>
                 </tr>
               ) : (
-                stats?.userEngagement?.topContributors?.map((contributor, index) => (
+                stats.userEngagement.topContributors.map((contributor, index) => (
                   <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium text-gray-800">{contributor.name}</td>
                     <td className="py-3 px-4 text-gray-600">{contributor.count || 0}</td>
                     <td className="py-3 px-4 text-gray-600">{contributor.totalWeight?.toFixed(1)} kg</td>
                     <td className="py-3 px-4">
-                      <span className="bg-primary-50 text-primary-600 px-2 py-1 rounded-full text-xs">
+                      <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-full text-xs font-medium">
                         {contributor.totalPoints || 0}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-gray-400">-</td>
+                    <td className="py-3 px-4 text-gray-400">
+                      {contributor.lastActive !== '-' && contributor.lastActive 
+                        ? format(new Date(contributor.lastActive), 'MMM dd, yyyy')
+                        : '-'}
+                    </td>
                   </tr>
                 ))
               )}

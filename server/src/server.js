@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const dns = require('dns');
 const fs = require('fs');
+const http = require('http');
 
 // Force Node.js to use Google DNS
 dns.setServers(['8.8.8.8', '8.8.4.4']);
@@ -26,9 +27,14 @@ const adminRoutes = require('./routes/adminRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
+const exportRoutes = require('./routes/exportRoutes');
+const chartRoutes = require('./routes/chartRoutes');
 
 // Import middleware
 const { errorHandler } = require('./middleware/errorMiddleware');
+
+// Import Socket.IO manager
+const { initializeSocket } = require('./socket/socketManager');
 
 // Initialize express app
 const app = express();
@@ -71,6 +77,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin/notifications', adminNotificationRoutes);
+app.use('/api/export', exportRoutes);
+app.use('/api/charts', chartRoutes);
 
 // Base route
 app.get('/', (req, res) => {
@@ -83,7 +91,9 @@ app.get('/', (req, res) => {
       contributions: '/api/contributions',
       incentives: '/api/incentives',
       admin: '/api/admin',
-      reports: '/api/reports'
+      reports: '/api/reports',
+      export: '/api/export',
+      charts: '/api/charts'
     }
   });
 });
@@ -157,6 +167,7 @@ const connectDB = async (retryCount = 0) => {
       }
     } catch (adminError) {
       // Silent fail for admin creation
+      console.log('⚠️ Admin creation skipped:', adminError.message);
     }
 
     // Connection event handlers
@@ -190,9 +201,22 @@ const connectDB = async (retryCount = 0) => {
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
-  const server = app.listen(PORT, () => {
+  // Create HTTP server
+  const server = http.createServer(app);
+  
+  // Initialize Socket.IO
+  const io = initializeSocket(server);
+  
+  // Make io available to controllers via app.set
+  app.set('io', io);
+  
+  // Also make it globally available for socketManager
+  global.io = io;
+  
+  server.listen(PORT, () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
-    console.log(`🔗 http://localhost:${PORT}\n`);
+    console.log(`🔗 http://localhost:${PORT}`);
+    console.log(`🔌 WebSocket server ready for connections\n`);
   });
 
   // Handle unhandled rejections
@@ -211,10 +235,20 @@ connectDB().then(() => {
   const gracefulShutdown = (signal) => {
     console.log(`\n${signal} received. Closing server...`);
     server.close(() => {
-      mongoose.connection.close(false, () => {
-        console.log('MongoDB connection closed');
-        process.exit(0);
-      });
+      if (io) {
+        io.close(() => {
+          console.log('WebSocket server closed');
+          mongoose.connection.close(false, () => {
+            console.log('MongoDB connection closed');
+            process.exit(0);
+          });
+        });
+      } else {
+        mongoose.connection.close(false, () => {
+          console.log('MongoDB connection closed');
+          process.exit(0);
+        });
+      }
     });
   };
 
