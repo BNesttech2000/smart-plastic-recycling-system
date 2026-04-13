@@ -4,6 +4,9 @@ const router = express.Router();
 const {
   registerUser,
   loginUser,
+  forgotPassword,
+  resetPassword,
+  updatePassword,
   getUserProfile,
   updateUserProfile,
   getUserContributions,
@@ -20,12 +23,15 @@ const { protect } = require('../middleware/authMiddleware');
 // Public routes
 router.post('/register', validateUserRegistration, validate, registerUser);
 router.post('/login', validateUserLogin, validate, loginUser);
+router.post('/forgot-password', forgotPassword);  // ← ADD THIS
+router.put('/reset-password/:token', resetPassword);  // ← ADD THIS
 
 // Protected routes
 router.route('/profile')
   .get(protect, getUserProfile)
   .put(protect, updateUserProfile);
 
+router.put('/update-password', protect, updatePassword);  // ← ADD THIS
 router.get('/contributions', protect, getUserContributions);
 router.get('/incentives', protect, getUserIncentives);
 router.get('/statistics', protect, getUserStatistics);

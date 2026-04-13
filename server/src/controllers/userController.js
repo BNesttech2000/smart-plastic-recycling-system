@@ -4,6 +4,8 @@ const Incentive = require('../models/Incentive');
 const PlasticContribution = require('../models/PlasticContribution');
 const generateToken = require('../utils/generateToken');
 const { asyncHandler } = require('../middleware/errorMiddleware');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 // @desc    Register a new user
 // @route   POST /api/users/register
@@ -46,7 +48,6 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 });
 
-
 // @desc    Login user
 // @route   POST /api/users/login
 // @access  Public
@@ -67,13 +68,10 @@ const loginUser = asyncHandler(async (req, res) => {
   
   let isMatch = false;
   
-  // Check if password is hashed or plain text
   if (user.password && user.password.startsWith('$2a$')) {
-    // It's a bcrypt hash
     isMatch = await user.matchPassword(password);
     console.log('Bcrypt password match:', isMatch);
   } else {
-    // It's plain text password
     isMatch = (user.password === password);
     console.log('Plain text password match:', isMatch);
   }
@@ -81,9 +79,8 @@ const loginUser = asyncHandler(async (req, res) => {
   console.log('Password match result:', isMatch);
 
   if (isMatch) {
-    // If password was plain text, we should hash it for security
     if (!user.password.startsWith('$2a$')) {
-      user.password = password; // This will trigger the pre-save hook to hash it
+      user.password = password;
       await user.save();
       console.log('✅ Password hashed and updated in database');
     }
@@ -115,6 +112,127 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 });
 
+// @desc    Forgot password - generate reset link
+// @route   POST /api/users/forgot-password
+// @access  Public
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  
+  console.log('🔍 Password reset requested for:', email);
+  
+  const user = await User.findOne({ email });
+  
+  if (!user) {
+    return res.json({
+      success: true,
+      message: 'If your email is registered, you will receive a password reset link'
+    });
+  }
+  
+  // Generate reset token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  const resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  console.log('Raw token (for URL):', resetToken);
+  console.log('Hashed token (stored in DB):', resetPasswordToken);
+  
+  // Set token expiry (10 minutes)
+  user.resetPasswordToken = resetPasswordToken;
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
+  await user.save();
+  
+  // Create reset URL
+  const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
+  
+  console.log('\n========================================');
+  console.log('🔐 PASSWORD RESET LINK:');
+  console.log(resetUrl);
+  console.log('========================================\n');
+  
+  res.json({
+    success: true,
+    message: 'Password reset link has been generated. Check the server console for the link.'
+  });
+});
+
+// @desc    Reset password
+// @route   PUT /api/users/reset-password/:token
+// @access  Public
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const { password } = req.body;
+  
+  console.log('🔍 Password reset attempt with token:', token.substring(0, 20) + '...');
+  
+  // Hash the token from URL to compare with database
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(token)
+    .digest('hex');
+  
+  console.log('Looking for hashed token:', hashedToken.substring(0, 20) + '...');
+  
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() }
+  });
+  
+  if (!user) {
+    console.log('❌ No user found - token may be expired or invalid');
+    res.status(400);
+    throw new Error('Invalid or expired token. Please request a new password reset.');
+  }
+  
+  console.log('✅ User found:', user.email);
+  
+  // Validate password
+  if (!password || password.length < 6) {
+    res.status(400);
+    throw new Error('Password must be at least 6 characters');
+  }
+  
+  // Update password
+  user.password = password;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+  await user.save();
+  
+  console.log('✅ Password reset successful for:', user.email);
+  
+  res.json({
+    success: true,
+    message: 'Password reset successful. Please login with your new password.'
+  });
+});
+
+// @desc    Update password (when logged in)
+// @route   PUT /api/users/update-password
+// @access  Private
+const updatePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  
+  const user = await User.findById(req.user._id).select('+password');
+  
+  const isMatch = await user.matchPassword(currentPassword);
+  
+  if (!isMatch) {
+    res.status(401);
+    throw new Error('Current password is incorrect');
+  }
+  
+  user.password = newPassword;
+  await user.save();
+  
+  console.log('✅ Password updated for user:', user.email);
+  
+  res.json({
+    success: true,
+    message: 'Password updated successfully'
+  });
+});
 
 // @desc    Get user profile
 // @route   GET /api/users/profile
@@ -266,7 +384,6 @@ const getUserStatistics = asyncHandler(async (req, res) => {
   try {
     const user = req.user;
 
-    // Get monthly contributions for the last 6 months
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
@@ -297,7 +414,6 @@ const getUserStatistics = asyncHandler(async (req, res) => {
       monthlyContributions = [];
     }
 
-    // Get plastic type breakdown
     let plasticBreakdown = [];
     try {
       plasticBreakdown = await PlasticContribution.aggregate([
@@ -320,7 +436,6 @@ const getUserStatistics = asyncHandler(async (req, res) => {
       plasticBreakdown = [];
     }
 
-    // Get user rank
     let rank = { rank: 0, totalUsers: 0, percentile: 0 };
     try {
       rank = await getUserRank(user._id);
@@ -345,7 +460,6 @@ const getUserStatistics = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('Error in getUserStatistics:', error);
-    // Return default data instead of failing
     res.json({
       success: true,
       data: {
@@ -367,6 +481,9 @@ const getUserStatistics = asyncHandler(async (req, res) => {
 module.exports = {
   registerUser,
   loginUser,
+  forgotPassword,
+  resetPassword,
+  updatePassword,
   getUserProfile,
   updateUserProfile,
   getUserContributions,

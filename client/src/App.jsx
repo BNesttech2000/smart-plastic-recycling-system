@@ -14,6 +14,8 @@ import Register from './pages/Register';
 import About from './pages/About';
 import Contact from './pages/Contact';
 import Notifications from './pages/user/Notifications';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 // User Pages
 import UserDashboard from './pages/user/UserDashboard';
@@ -58,7 +60,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public Routes - with Navbar and Footer */}
+      {/* Public Routes - without authentication */}
       <Route path="/" element={
         <div className="min-h-screen flex flex-col">
           <Navbar />
@@ -99,7 +101,24 @@ function AppRoutes() {
         </div>
       } />
 
-      {/* User Routes - Only for non-admin users */}
+      {/* Password Reset Routes - Public */}
+      <Route path="/forgot-password" element={
+        <div className="min-h-screen flex flex-col">
+          <Navbar />
+          <main className="flex-grow"><ForgotPassword /></main>
+          <Footer />
+        </div>
+      } />
+      
+      <Route path="/reset-password/:token" element={
+        <div className="min-h-screen flex flex-col">
+          <Navbar />
+          <main className="flex-grow"><ResetPassword /></main>
+          <Footer />
+        </div>
+      } />
+
+      {/* User Routes - Only for authenticated non-admin users */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
           <div className="min-h-screen flex flex-col">
@@ -140,7 +159,6 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
-      {/* Notifications Route - Only for regular users */}
       <Route path="/notifications" element={
         <ProtectedRoute>
           <div className="min-h-screen flex flex-col">
