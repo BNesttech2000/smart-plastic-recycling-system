@@ -40,7 +40,7 @@ const adminLogin = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const getUsers = asyncHandler(async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '' } = req.query;
+    const { page = 1, limit = 10, search = '', status = '', tier = '' } = req.query;
     
     const filter = {};
     if (search) {
@@ -48,6 +48,16 @@ const getUsers = asyncHandler(async (req, res) => {
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
+    }
+
+    if (status === 'active') {
+      filter.isActive = true;
+    } else if (status === 'inactive') {
+      filter.isActive = false;
+    }
+
+    if (tier && tier.toLowerCase() !== 'all') {
+      filter.rewardTier = { $regex: `^${tier}$`, $options: 'i' };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

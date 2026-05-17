@@ -11,10 +11,11 @@ const path = require('path');
 // @route   GET /api/export/contributions/csv
 // @access  Private/Admin
 const exportContributionsCSV = asyncHandler(async (req, res) => {
-  const { startDate, endDate, status } = req.query;
+  const { startDate, endDate, status, plasticType } = req.query;
   
   const filter = {};
   if (status) filter.status = status;
+  if (plasticType) filter.plasticType = plasticType;
   if (startDate || endDate) {
     filter.createdAt = {};
     if (startDate) filter.createdAt.$gte = new Date(startDate);
@@ -24,6 +25,18 @@ const exportContributionsCSV = asyncHandler(async (req, res) => {
   const contributions = await PlasticContribution.find(filter)
     .populate('user', 'name email')
     .sort({ createdAt: -1 });
+  
+  const csvFields = [
+    'User Name',
+    'User Email',
+    'Plastic Type',
+    'Quantity (kg)',
+    'Points Earned',
+    'Status',
+    'Collection Point',
+    'Submitted Date',
+    'Approved Date'
+  ];
   
   const csvData = contributions.map(c => ({
     'User Name': c.user?.name || 'Unknown',
@@ -37,7 +50,7 @@ const exportContributionsCSV = asyncHandler(async (req, res) => {
     'Approved Date': c.approvedDate ? c.approvedDate.toISOString().split('T')[0] : 'N/A'
   }));
   
-  const csv = json2csv(csvData);
+  const csv = json2csv(csvData, { fields: csvFields });
   
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=contributions_${Date.now()}.csv`);
@@ -49,6 +62,19 @@ const exportContributionsCSV = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const exportUsersCSV = asyncHandler(async (req, res) => {
   const users = await User.find({});
+  
+  const csvFields = [
+    'Name',
+    'Email',
+    'Phone',
+    'Total Points',
+    'Total Weight (kg)',
+    'Total Contributions',
+    'Reward Tier',
+    'Status',
+    'Joined Date',
+    'Last Contribution'
+  ];
   
   const csvData = users.map(u => ({
     'Name': u.name,
@@ -63,10 +89,36 @@ const exportUsersCSV = asyncHandler(async (req, res) => {
     'Last Contribution': u.lastContribution ? u.lastContribution.toISOString().split('T')[0] : 'Never'
   }));
   
-  const csv = json2csv(csvData);
+  const csv = json2csv(csvData, { fields: csvFields });
   
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=users_${Date.now()}.csv`);
+  res.status(200).send(csv);
+});
+
+// @desc    Export users to Excel (.xls)
+// @route   GET /api/export/users/excel
+// @access  Private/Admin
+const exportUsersExcel = asyncHandler(async (req, res) => {
+  const users = await User.find({});
+  
+  const excelData = users.map(u => ({
+    'Name': u.name,
+    'Email': u.email,
+    'Phone': u.phone || 'N/A',
+    'Total Points': u.totalPoints,
+    'Total Weight (kg)': u.totalWeight,
+    'Total Contributions': u.totalContributions,
+    'Reward Tier': u.rewardTier,
+    'Status': u.isActive ? 'Active' : 'Inactive',
+    'Joined Date': u.joinedDate.toISOString().split('T')[0],
+    'Last Contribution': u.lastContribution ? u.lastContribution.toISOString().split('T')[0] : 'Never'
+  }));
+  
+  const csv = json2csv(excelData);
+  
+  res.setHeader('Content-Type', 'application/vnd.ms-excel');
+  res.setHeader('Content-Disposition', `attachment; filename=users_${Date.now()}.xls`);
   res.status(200).send(csv);
 });
 
@@ -150,10 +202,11 @@ const exportReportPDF = asyncHandler(async (req, res) => {
 // @route   GET /api/export/contributions/excel
 // @access  Private/Admin
 const exportContributionsExcel = asyncHandler(async (req, res) => {
-  const { startDate, endDate, status } = req.query;
+  const { startDate, endDate, status, plasticType } = req.query;
   
   const filter = {};
   if (status) filter.status = status;
+  if (plasticType) filter.plasticType = plasticType;
   if (startDate || endDate) {
     filter.createdAt = {};
     if (startDate) filter.createdAt.$gte = new Date(startDate);
@@ -163,6 +216,18 @@ const exportContributionsExcel = asyncHandler(async (req, res) => {
   const contributions = await PlasticContribution.find(filter)
     .populate('user', 'name email')
     .sort({ createdAt: -1 });
+  
+  const csvFields = [
+    'User Name',
+    'User Email',
+    'Plastic Type',
+    'Quantity (kg)',
+    'Points Earned',
+    'Status',
+    'Collection Point',
+    'Submitted Date',
+    'Approved Date'
+  ];
   
   const excelData = contributions.map(c => ({
     'User Name': c.user?.name || 'Unknown',
@@ -176,7 +241,7 @@ const exportContributionsExcel = asyncHandler(async (req, res) => {
     'Approved Date': c.approvedDate ? c.approvedDate.toISOString().split('T')[0] : 'N/A'
   }));
   
-  const csv = json2csv(excelData);
+  const csv = json2csv(excelData, { fields: csvFields });
   
   res.setHeader('Content-Type', 'application/vnd.ms-excel');
   res.setHeader('Content-Disposition', `attachment; filename=contributions_${Date.now()}.xls`);
@@ -186,6 +251,7 @@ const exportContributionsExcel = asyncHandler(async (req, res) => {
 module.exports = {
   exportContributionsCSV,
   exportUsersCSV,
+  exportUsersExcel,
   exportReportPDF,
   exportContributionsExcel
 };

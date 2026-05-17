@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import { exportService } from '../../services/exportService';
 
 const ApproveContributions = () => {
   const [contributions, setContributions] = useState([]);
@@ -70,6 +71,31 @@ const ApproveContributions = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getContributionExportFilters = () => {
+    const filters = {};
+    if (filterStatus && filterStatus !== 'all') {
+      filters.status = filterStatus;
+    }
+    if (filterType && filterType !== 'all') {
+      filters.plasticType = filterType;
+    }
+    return filters;
+  };
+
+  const handleExportContributions = async () => {
+    try {
+      await exportService.exportContributionsCSV(getContributionExportFilters());
+      toast.success('Contribution export started');
+    } catch (error) {
+      console.error('Error exporting contributions:', error);
+      toast.error('Failed to export contributions');
+    }
+  };
+
+  const handlePrintContributions = () => {
+    window.print();
   };
 
   const calculateStats = () => {
@@ -214,10 +240,10 @@ const ApproveContributions = () => {
           <p className="text-gray-600">Review and verify user contributions</p>
         </div>
         <div className="flex items-center space-x-4 mt-4 md:mt-0">
-          <button className="flex items-center space-x-2 bg-white text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
+          <button onClick={handleExportContributions} className="flex items-center space-x-2 bg-white text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
             <FaDownload /><span>Export</span>
           </button>
-          <button className="flex items-center space-x-2 bg-white text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
+          <button onClick={handlePrintContributions} className="flex items-center space-x-2 bg-white text-gray-600 px-4 py-2 rounded-lg shadow-sm hover:bg-gray-50 transition-colors">
             <FaPrint /><span>Print</span>
           </button>
         </div>

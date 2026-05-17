@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   exportContributionsCSV,
   exportUsersCSV,
+  exportUsersExcel,
   exportReportPDF,
   exportContributionsExcel
 } = require('../controllers/exportController');
@@ -15,6 +16,7 @@ router.use(protect, admin);
 router.get('/contributions/csv', exportContributionsCSV);
 router.get('/contributions/excel', exportContributionsExcel);
 router.get('/users/csv', exportUsersCSV);
+router.get('/users/excel', exportUsersExcel);
 router.post('/report/pdf', exportReportPDF);
 
 module.exports = router;
