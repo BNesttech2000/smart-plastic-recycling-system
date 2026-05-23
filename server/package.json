@@ -6,8 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "start:prod": "NODE_ENV=production node src/server.js",
     "seed": "node src/seed.js",
     "seed:prod": "NODE_ENV=production node src/seed.js",
+    "build": "npm ci --production",
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "eslint src/**/*.js",
     "lint:fix": "eslint src/**/*.js --fix"
@@ -68,10 +70,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/smart-plastic-recycling-system.git"
+    "url": "https://github.com/BNesttech2000/smart-plastic-recycling-system.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/smart-plastic-recycling-system/issues"
+    "url": "https://github.com/BNesttech2000/smart-plastic-recycling-system/issues"
   },
-  "homepage": "https://github.com/yourusername/smart-plastic-recycling-system#readme"
+  "homepage": "https://github.com/BNesttech2000/smart-plastic-recycling-system#readme"
 }
