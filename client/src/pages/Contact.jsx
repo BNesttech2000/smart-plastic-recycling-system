@@ -54,14 +54,18 @@ const Contact = () => {
     {
       icon: FaMapMarkerAlt,
       title: 'Visit Us',
-      details: ['Lusaka, Zambia', 'Great East Road, Cavendish University'],
+      details: ['Lusaka, Zambia', 'Great North Road, Cavendish University'],
       color: 'text-red-500',
       bg: 'bg-red-100',
     },
+
+
+        
+
     {
       icon: FaPhone,
       title: 'Call Us',
-      details: ['+260 975 692353', '+260 96 765 4321'],
+      details: [' +260 975 691 353', '+260 967 199 493'],
       color: 'text-green-500',
       bg: 'bg-green-100',
     },
