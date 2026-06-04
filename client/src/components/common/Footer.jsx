@@ -33,7 +33,7 @@ const Footer = () => {
             <h4 className="font-semibold mb-4">Contact Us</h4>
             <ul className="space-y-2 text-gray-300">
               <li>Email: info@smartrecycle.com</li>
-              <li>Phone: +260 975 692353</li>
+              <li>Phone: +260 975 691 353</li>
               <li>Address: Lusaka, Zambia</li>
             </ul>
           </div>
