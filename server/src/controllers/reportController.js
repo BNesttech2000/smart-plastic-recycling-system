@@ -1,13 +1,15 @@
 // server/src/controllers/reportController.js
 const Report = require('../models/Report');
+const User = require('../models/User');
+const PlasticContribution = require('../models/PlasticContribution');
 const { asyncHandler } = require('../middleware/errorMiddleware');
+const PDFDocument = require('pdfkit');
 
 // @desc    Get all reports
 // @route   GET /api/reports
 // @access  Private/Admin
 const getReports = asyncHandler(async (req, res) => {
   try {
-    // Make sure req.user exists
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'User not authenticated' });
     }
@@ -45,7 +47,6 @@ const getReports = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const generateReport = asyncHandler(async (req, res) => {
   try {
-    // Check if user is authenticated
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'User not authenticated' });
     }
@@ -54,30 +55,67 @@ const generateReport = asyncHandler(async (req, res) => {
     
     const { type, startDate, endDate, format = 'JSON', includeCharts, includeTables } = req.body;
     
-    // Create report title
+    // Calculate date range
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    end.setHours(23, 59, 59, 999);
+    
+    console.log('Date range:', { start, end });
+    
+    // Get contributions in date range
+    const contributions = await PlasticContribution.find({
+      createdAt: { $gte: start, $lte: end },
+      status: 'approved'
+    }).populate('user', 'name');
+    
+    console.log('Found contributions:', contributions.length);
+    
+    const totalUsers = await User.countDocuments();
+    const totalWeight = contributions.reduce((sum, c) => sum + (c.quantity || 0), 0);
+    const totalPoints = contributions.reduce((sum, c) => sum + (c.pointsEarned || 0), 0);
+    
+    // Plastic type breakdown
+    const plasticBreakdown = {};
+    contributions.forEach(c => {
+      const type = c.plasticType || 'OTHER';
+      if (!plasticBreakdown[type]) {
+        plasticBreakdown[type] = 0;
+      }
+      plasticBreakdown[type] += c.quantity || 0;
+    });
+    
+    const breakdownArray = Object.entries(plasticBreakdown).map(([type, qty]) => ({
+      plasticType: type,
+      quantity: qty,
+      percentage: totalWeight > 0 ? (qty / totalWeight) * 100 : 0
+    }));
+    
+    // Create the report with REAL data
     const title = `${type} Report - ${new Date().toLocaleDateString()}`;
     
-    // Create the report
     const report = await Report.create({
       title: title,
       reportType: type,
       generatedBy: req.user._id,
       generatedDate: new Date(),
-      dateRange: {
-        start: startDate ? new Date(startDate) : new Date(),
-        end: endDate ? new Date(endDate) : new Date()
-      },
-      format: format,
+      dateRange: { start, end },
+      format: format || 'JSON',
       status: 'COMPLETED',
       summary: {
-        message: 'Report generated successfully',
-        generatedAt: new Date(),
+        totalContributions: contributions.length,
+        totalUsers: totalUsers,
+        totalWeight: totalWeight,
+        totalPointsAwarded: totalPoints,
+        averageContribution: contributions.length > 0 ? totalWeight / contributions.length : 0,
+        activeUsers: new Set(contributions.map(c => c.user?._id?.toString())).size,
         includeCharts: includeCharts || false,
         includeTables: includeTables || false
-      }
+      },
+      plasticBreakdown: breakdownArray
     });
     
     console.log('Report created successfully:', report._id);
+    console.log('Summary data:', report.summary);
     
     res.status(201).json({
       success: true,
@@ -136,20 +174,96 @@ const downloadReport = asyncHandler(async (req, res) => {
   
   const { format = 'JSON' } = req.query;
   
-  // Return report data based on format
-  if (format === 'JSON') {
+  console.log('Downloading report:', report._id, 'Format:', format);
+  console.log('Report summary:', report.summary);
+  
+  if (format.toUpperCase() === 'PDF') {
+    return await downloadAsPDF(report, res);
+  } else {
+    // For other formats, return JSON
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=report-${report._id}.json`);
     return res.json(report);
-  } else {
-    // For other formats, just return the report data
-    res.json({
-      success: true,
-      data: report,
-      message: `Download ready in ${format} format (implementation coming soon)`
-    });
   }
 });
+
+// Helper: Download as PDF
+const downloadAsPDF = async (report, res) => {
+  try {
+    console.log('Generating PDF for report:', report._id);
+    
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=report-${report._id}.pdf`);
+    
+    doc.pipe(res);
+    
+    const summary = report.summary || {};
+    const breakdown = report.plasticBreakdown || [];
+    
+    // Header
+    doc.fontSize(24).font('Helvetica-Bold').text(report.title || 'Report', { align: 'center' });
+    doc.moveDown(0.5);
+    
+    // Date
+    doc.fontSize(12).font('Helvetica');
+    doc.text(`Generated: ${new Date(report.generatedDate).toLocaleString()}`, { align: 'center' });
+    doc.text(`Report Type: ${report.reportType || 'MONTHLY'}`, { align: 'center' });
+    doc.text(`Date Range: ${new Date(report.dateRange?.start).toLocaleDateString()} - ${new Date(report.dateRange?.end).toLocaleDateString()}`, { align: 'center' });
+    doc.moveDown();
+    
+    doc.strokeColor('#0ea5e9').lineWidth(2).moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    doc.moveDown();
+    
+    // Summary Section
+    doc.fontSize(16).font('Helvetica-Bold').text('Summary Statistics', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica');
+    
+    const summaryData = [
+      ['Total Contributions', summary.totalContributions || 0],
+      ['Total Users', summary.totalUsers || 0],
+      ['Total Weight (kg)', (summary.totalWeight || 0).toFixed(2)],
+      ['Total Points Awarded', summary.totalPointsAwarded || 0],
+      ['Average Contribution (kg)', (summary.averageContribution || 0).toFixed(2)],
+      ['Active Users', summary.activeUsers || 0]
+    ];
+    
+    summaryData.forEach(([label, value]) => {
+      doc.text(`${label}: ${value}`);
+    });
+    doc.moveDown();
+    
+    // Plastic Breakdown
+    if (breakdown && breakdown.length > 0) {
+      doc.fontSize(16).font('Helvetica-Bold').text('Plastic Type Breakdown', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(12).font('Helvetica');
+      
+      breakdown.forEach(item => {
+        const type = item.plasticType || 'Unknown';
+        const qty = (item.quantity || 0).toFixed(2);
+        const pct = (item.percentage || 0).toFixed(1);
+        doc.text(`${type}: ${qty} kg (${pct}%)`);
+      });
+      doc.moveDown();
+    }
+    
+    // Footer
+    doc.fontSize(10).font('Helvetica').fillColor('gray');
+    doc.text('─'.repeat(60), { align: 'center' });
+    doc.text('Smart Plastic Collection and Recycling Incentive System', { align: 'center' });
+    doc.text(`© ${new Date().getFullYear()} All Rights Reserved`, { align: 'center' });
+    
+    doc.end();
+    
+    console.log('✅ PDF generated successfully!');
+  } catch (error) {
+    console.error('❌ PDF Generation Error:', error);
+    res.status(500).json({ success: false, message: 'Error generating PDF: ' + error.message });
+  }
+};
 
 // @desc    Delete report
 // @route   DELETE /api/reports/:id
